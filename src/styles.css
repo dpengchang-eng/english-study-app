@@ -1,0 +1,299 @@
+:root {
+  font-family: "Inter", "Noto Sans KR", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+  color: #e8eefc;
+  background: linear-gradient(180deg, #101529 0%, #1b2240 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: transparent;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 20px 14px 32px;
+}
+
+.top-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #97a5d8;
+  font-size: 0.85rem;
+}
+
+h1 {
+  margin: 6px 0 4px;
+  font-size: 1.9rem;
+}
+
+.subtext {
+  margin: 0;
+  color: #b8c2eb;
+}
+
+.badge {
+  border: 1px solid #3d4a80;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  color: #d4ddff;
+  background: #232c52;
+}
+
+.tab-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tab {
+  border: none;
+  border-radius: 12px;
+  background: #252f58;
+  color: #d6defe;
+  padding: 10px;
+  font-size: 0.95rem;
+}
+
+.tab.active {
+  background: linear-gradient(120deg, #4f7fff, #76a4ff);
+  color: #0d1330;
+  font-weight: 700;
+}
+
+.panel {
+  background: rgba(14, 20, 43, 0.85);
+  border: 1px solid #2a386c;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.25);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  background: #1d2850;
+  border: 1px solid #344887;
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.metric.wide {
+  grid-column: 1 / -1;
+}
+
+.metric h3 {
+  margin: 0 0 6px;
+  color: #a9baf1;
+  font-size: 0.95rem;
+}
+
+.value {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: #97a5d8;
+  font-size: 0.9rem;
+}
+
+.progress-track {
+  margin-top: 10px;
+  width: 100%;
+  height: 10px;
+  background: #121a39;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #5ed8d2, #67c1ff);
+}
+
+h2 {
+  margin: 0 0 8px;
+}
+
+.card {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid #3a4f92;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #1b2a59 0%, #152246 100%);
+  color: #ecf1ff;
+  padding: 16px;
+  text-align: left;
+  min-height: 190px;
+}
+
+.card-count {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  color: #a2b3ec;
+}
+
+.card h3 {
+  margin: 0 0 10px;
+  font-size: 1.7rem;
+}
+
+.tap-help,
+.korean,
+.level {
+  margin: 7px 0;
+}
+
+.korean {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.button-row {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.btn,
+.toggle,
+.option {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.btn.weak {
+  background: #334170;
+  color: #f4f7ff;
+}
+
+.btn.strong {
+  background: linear-gradient(120deg, #6ca3ff, #7be7d7);
+  color: #0d1637;
+  font-weight: 700;
+}
+
+.btn.full {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.toggle {
+  background: #293760;
+  color: #d2dbff;
+}
+
+.toggle.active {
+  background: #4e78e5;
+  color: #edf3ff;
+}
+
+.question-box {
+  margin-top: 10px;
+  background: #1f2a4c;
+  border: 1px solid #385290;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.question-label {
+  margin: 0;
+  color: #a9baf1;
+  font-size: 0.85rem;
+}
+
+.question {
+  margin: 6px 0 12px;
+  line-height: 1.45;
+}
+
+.example {
+  color: #bed0ff;
+}
+
+.options {
+  display: grid;
+  gap: 8px;
+}
+
+.option {
+  text-align: left;
+  background: #324a8a;
+  color: #eff4ff;
+}
+
+.typing-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+input {
+  flex: 1;
+  min-width: 190px;
+  border-radius: 10px;
+  border: 1px solid #4a64a8;
+  background: #0f1733;
+  color: #f0f4ff;
+  padding: 10px;
+  font-size: 0.95rem;
+}
+
+.feedback {
+  margin-top: 10px;
+  color: #8cf0d9;
+}
+
+.empty {
+  margin-top: 8px;
+  border: 1px dashed #3a4f88;
+  border-radius: 14px;
+  padding: 14px;
+  color: #c5cff3;
+}
+
+@media (max-width: 720px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tab-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  h1 {
+    font-size: 1.55rem;
+  }
+
+  .value {
+    font-size: 1.5rem;
+  }
+}

@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { browserLocalPersistence, onAuthStateChanged, setPersistence, signInAnonymously } from "firebase/auth";
+import { collection, doc, getDoc, getDocs, setDoc, writeBatch } from "firebase/firestore";
+import { auth, db } from "./firebase";
 
 type TabId = "dashboard" | "flashcards" | "quiz" | "review";
 type QuizMode = "mcq" | "typing";
@@ -25,6 +28,8 @@ type StudyStats = {
   totalAnswers: number;
   correctAnswers: number;
   studyDates: string[];
+  streakCount: number;
+  lastStudyDate: string | null;
 };
 
 type QuizQuestion = {
@@ -99,7 +104,9 @@ const createInitialStats = (): StudyStats => ({
   totalSessions: 0,
   totalAnswers: 0,
   correctAnswers: 0,
-  studyDates: []
+  studyDates: [],
+  streakCount: 0,
+  lastStudyDate: null
 });
 
 const getStreakFromDates = (dates: string[]): number => {
@@ -135,130 +142,423 @@ const makeQuestion = (words: Word[]): QuizQuestion => {
   };
 };
 
+const sortWordById = (a: Word, b: Word): number => Number(a.id.slice(1)) - Number(b.id.slice(1));
+
+const withTodayStudyDate = (studyDates: string[], today: string): string[] =>
+  Array.from(new Set([...studyDates, today])).sort();
+
+const deriveStreakData = (studyDates: string[]): { streakCount: number; lastStudyDate: string | null } => ({
+  streakCount: getStreakFromDates(studyDates),
+  lastStudyDate: studyDates.length > 0 ? [...studyDates].sort()[studyDates.length - 1] ?? null : null
+});
+
+const toStatsFromUnknown = (raw: unknown): StudyStats => {
+  const initial = createInitialStats();
+  if (!raw || typeof raw !== "object") return initial;
+  const candidate = raw as Partial<StudyStats>;
+  const safeStudyDates = Array.isArray(candidate.studyDates)
+    ? candidate.studyDates.filter((item): item is string => typeof item === "string")
+    : [];
+  return {
+    totalSessions: typeof candidate.totalSessions === "number" ? candidate.totalSessions : 0,
+    totalAnswers: typeof candidate.totalAnswers === "number" ? candidate.totalAnswers : 0,
+    correctAnswers: typeof candidate.correctAnswers === "number" ? candidate.correctAnswers : 0,
+    studyDates: safeStudyDates,
+    streakCount: typeof candidate.streakCount === "number" ? candidate.streakCount : deriveStreakData(safeStudyDates).streakCount,
+    lastStudyDate:
+      typeof candidate.lastStudyDate === "string"
+        ? candidate.lastStudyDate
+        : deriveStreakData(safeStudyDates).lastStudyDate
+  };
+};
+
+const createInitialProgressForWords = (words: Word[]): Record<string, WordProgress> => {
+  const now = new Date().toISOString();
+  return Object.fromEntries(
+    words.map((word) => [
+      word.id,
+      {
+        intervalDays: 0,
+        dueAt: now,
+        streak: 0,
+        totalReviews: 0,
+        correctReviews: 0,
+        lastResult: null
+      }
+    ])
+  );
+};
+
+const normalizeProgressData = (raw: unknown, fallbackDueAt: string): WordProgress => {
+  if (!raw || typeof raw !== "object") {
+    return {
+      intervalDays: 0,
+      dueAt: fallbackDueAt,
+      streak: 0,
+      totalReviews: 0,
+      correctReviews: 0,
+      lastResult: null
+    };
+  }
+  const candidate = raw as Partial<WordProgress>;
+  const lastResult =
+    candidate.lastResult === "correct" || candidate.lastResult === "wrong" || candidate.lastResult === null
+      ? candidate.lastResult
+      : null;
+  return {
+    intervalDays: typeof candidate.intervalDays === "number" ? candidate.intervalDays : 0,
+    dueAt: typeof candidate.dueAt === "string" ? candidate.dueAt : fallbackDueAt,
+    streak: typeof candidate.streak === "number" ? candidate.streak : 0,
+    totalReviews: typeof candidate.totalReviews === "number" ? candidate.totalReviews : 0,
+    correctReviews: typeof candidate.correctReviews === "number" ? candidate.correctReviews : 0,
+    lastResult
+  };
+};
+
+const fromLegacyStorage = (
+  words: Word[]
+): {
+  progress: Record<string, WordProgress>;
+  stats: StudyStats;
+} | null => {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { progress?: Record<string, unknown>; stats?: unknown };
+    const baseProgress = createInitialProgressForWords(words);
+    Object.keys(baseProgress).forEach((wordId) => {
+      if (parsed.progress?.[wordId]) {
+        baseProgress[wordId] = normalizeProgressData(parsed.progress[wordId], baseProgress[wordId].dueAt);
+      }
+    });
+    const baseStats = toStatsFromUnknown(parsed.stats);
+    return {
+      progress: baseProgress,
+      stats: {
+        ...baseStats,
+        ...deriveStreakData(baseStats.studyDates)
+      }
+    };
+  } catch {
+    return null;
+  }
+};
+
 export default function App() {
   const [tab, setTab] = useState<TabId>("dashboard");
+  const [words, setWords] = useState<Word[]>([]);
   const [progress, setProgress] = useState<Record<string, WordProgress>>(createInitialProgress);
   const [stats, setStats] = useState<StudyStats>(createInitialStats);
+  const [uid, setUid] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingWrites, setPendingWrites] = useState(0);
 
   const [flashIndex, setFlashIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
 
   const [quizMode, setQuizMode] = useState<QuizMode>("mcq");
   const [quizActive, setQuizActive] = useState(false);
-  const [quizQuestion, setQuizQuestion] = useState<QuizQuestion>(makeQuestion(STARTER_WORDS));
+  const [quizQuestion, setQuizQuestion] = useState<QuizQuestion | null>(null);
   const [typingAnswer, setTypingAnswer] = useState("");
   const [quizFeedback, setQuizFeedback] = useState<string>("");
 
   const [reviewActive, setReviewActive] = useState(false);
   const [reviewInput, setReviewInput] = useState("");
   const [reviewFeedback, setReviewFeedback] = useState("");
+  const lastLoadedUidRef = useRef<string | null>(null);
+
+  const isSaving = pendingWrites > 0;
+
+  const runWrite = async (task: () => Promise<void>): Promise<void> => {
+    setPendingWrites((prev) => prev + 1);
+    try {
+      await task();
+      setLoadError(null);
+    } catch {
+      setLoadError("데이터 저장에 실패했습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.");
+    } finally {
+      setPendingWrites((prev) => Math.max(0, prev - 1));
+    }
+  };
+
+  const persistStats = async (userId: string, nextStats: StudyStats): Promise<void> => {
+    await runWrite(async () => {
+      await setDoc(
+        doc(db, "users", userId),
+        {
+          ...nextStats,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+    });
+  };
+
+  const persistProgressAndStats = async (
+    userId: string,
+    wordId: string,
+    nextWordProgress: WordProgress,
+    nextStats: StudyStats
+  ): Promise<void> => {
+    await runWrite(async () => {
+      const batch = writeBatch(db);
+      batch.set(
+        doc(db, "users", userId, "progress", wordId),
+        {
+          ...nextWordProgress,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+      batch.set(
+        doc(db, "users", userId),
+        {
+          ...nextStats,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+      await batch.commit();
+    });
+  };
+
+  const seedStarterWordsIfMissing = async (): Promise<void> => {
+    await Promise.all(
+      STARTER_WORDS.map(async (word) => {
+        const wordRef = doc(db, "words", word.id);
+        const snapshot = await getDoc(wordRef);
+        if (!snapshot.exists()) {
+          await setDoc(wordRef, {
+            english: word.english,
+            korean: word.korean,
+            example: word.example,
+            level: word.level
+          });
+        }
+      })
+    );
+  };
+
+  const fetchWords = async (): Promise<Word[]> => {
+    const wordsSnapshot = await getDocs(collection(db, "words"));
+    if (wordsSnapshot.empty) return [];
+    return wordsSnapshot.docs
+      .map((wordDoc) => {
+        const data = wordDoc.data() as Omit<Word, "id">;
+        return {
+          id: wordDoc.id,
+          english: data.english,
+          korean: data.korean,
+          example: data.example,
+          level: data.level
+        };
+      })
+      .sort(sortWordById);
+  };
+
+  const initializeUserData = async (userId: string): Promise<void> => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      await seedStarterWordsIfMissing();
+
+      const wordsFromDb = await fetchWords();
+      const finalWords = wordsFromDb.length > 0 ? wordsFromDb : [...STARTER_WORDS].sort(sortWordById);
+      setWords(finalWords);
+
+      const userRef = doc(db, "users", userId);
+      const progressRef = collection(db, "users", userId, "progress");
+
+      const [userSnapshot, progressSnapshot] = await Promise.all([getDoc(userRef), getDocs(progressRef)]);
+
+      let nextProgress = createInitialProgressForWords(finalWords);
+      progressSnapshot.docs.forEach((progressDoc) => {
+        if (!nextProgress[progressDoc.id]) return;
+        nextProgress[progressDoc.id] = normalizeProgressData(progressDoc.data(), nextProgress[progressDoc.id].dueAt);
+      });
+
+      let nextStats = userSnapshot.exists() ? toStatsFromUnknown(userSnapshot.data()) : createInitialStats();
+      nextStats = {
+        ...nextStats,
+        ...deriveStreakData(nextStats.studyDates)
+      };
+
+      // One-time migration from old localStorage data if this Firestore user has no saved state yet.
+      if (!userSnapshot.exists() && progressSnapshot.empty) {
+        const legacy = fromLegacyStorage(finalWords);
+        if (legacy) {
+          nextProgress = legacy.progress;
+          nextStats = legacy.stats;
+
+          const batch = writeBatch(db);
+          Object.entries(nextProgress).forEach(([wordId, wordProgress]) => {
+            batch.set(doc(db, "users", userId, "progress", wordId), {
+              ...wordProgress,
+              updatedAt: new Date().toISOString()
+            });
+          });
+          batch.set(doc(db, "users", userId), {
+            ...nextStats,
+            migratedFromLocalStorage: true,
+            updatedAt: new Date().toISOString()
+          });
+          await batch.commit();
+          localStorage.removeItem(STORAGE_KEY);
+        } else {
+          await setDoc(
+            doc(db, "users", userId),
+            {
+              ...nextStats,
+              updatedAt: new Date().toISOString()
+            },
+            { merge: true }
+          );
+        }
+      }
+
+      setProgress(nextProgress);
+      setStats(nextStats);
+      setQuizQuestion(finalWords.length > 0 ? makeQuestion(finalWords) : null);
+      setFlashIndex(0);
+      setFlipped(false);
+    } catch {
+      setLoadError("Firebase에서 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      setWords([...STARTER_WORDS].sort(sortWordById));
+      setProgress(createInitialProgressForWords(STARTER_WORDS));
+      setStats(createInitialStats());
+      setQuizQuestion(makeQuestion(STARTER_WORDS));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as { progress?: Record<string, WordProgress>; stats?: StudyStats };
-      const mergedProgress = createInitialProgress();
-      if (parsed.progress) {
-        Object.keys(mergedProgress).forEach((key) => {
-          if (parsed.progress?.[key]) {
-            mergedProgress[key] = parsed.progress[key];
-          }
-        });
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+      setUid(user.uid);
+      if (lastLoadedUidRef.current === user.uid) return;
+      lastLoadedUidRef.current = user.uid;
+      void initializeUserData(user.uid);
+    });
+
+    void (async () => {
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
+      } catch {
+        setLoadError("익명 로그인에 실패했습니다. 페이지를 새로고침해 주세요.");
+        setIsLoading(false);
       }
-      setProgress(mergedProgress);
-      setStats(parsed.stats ?? createInitialStats());
-    } catch {
-      setProgress(createInitialProgress());
-      setStats(createInitialStats());
-    }
+    })();
+
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ progress, stats }));
-  }, [progress, stats]);
+    if (words.length > 0 && !quizQuestion) {
+      setQuizQuestion(makeQuestion(words));
+    }
+  }, [words, quizQuestion]);
 
   const dueWordIds = useMemo(() => {
     const now = Date.now();
-    return STARTER_WORDS.filter((word) => new Date(progress[word.id]?.dueAt ?? 0).getTime() <= now).map((word) => word.id);
-  }, [progress]);
+    return words.filter((word) => new Date(progress[word.id]?.dueAt ?? 0).getTime() <= now).map((word) => word.id);
+  }, [progress, words]);
 
-  const reviewWord = useMemo(() => STARTER_WORDS.find((word) => word.id === dueWordIds[0]) ?? null, [dueWordIds]);
+  const reviewWord = useMemo(() => words.find((word) => word.id === dueWordIds[0]) ?? null, [dueWordIds, words]);
 
-  const learnedCount = useMemo(
-    () => STARTER_WORDS.filter((word) => (progress[word.id]?.streak ?? 0) >= 3).length,
-    [progress]
-  );
+  const learnedCount = useMemo(() => words.filter((word) => (progress[word.id]?.streak ?? 0) >= 3).length, [progress, words]);
 
   const today = dayKey();
   const accuracy = stats.totalAnswers > 0 ? Math.round((stats.correctAnswers / stats.totalAnswers) * 100) : 0;
-  const streak = getStreakFromDates(stats.studyDates);
-  const flashWord = STARTER_WORDS[flashIndex % STARTER_WORDS.length];
+  const streak = stats.streakCount;
+  const learnedRate = words.length > 0 ? (learnedCount / words.length) * 100 : 0;
+  const flashWord = words.length > 0 ? words[flashIndex % words.length] : null;
 
   const recordSessionStart = (): void => {
-    setStats((prev) => ({
-      ...prev,
-      totalSessions: prev.totalSessions + 1,
-      studyDates: Array.from(new Set([...prev.studyDates, today])).sort()
-    }));
+    if (!uid) return;
+    const nextDates = withTodayStudyDate(stats.studyDates, today);
+    const nextStats: StudyStats = {
+      ...stats,
+      totalSessions: stats.totalSessions + 1,
+      studyDates: nextDates,
+      ...deriveStreakData(nextDates)
+    };
+    setStats(nextStats);
+    void persistStats(uid, nextStats);
   };
 
-  const recordAnswer = (correct: boolean): void => {
-    setStats((prev) => ({
-      ...prev,
-      totalAnswers: prev.totalAnswers + 1,
-      correctAnswers: prev.correctAnswers + (correct ? 1 : 0),
-      studyDates: Array.from(new Set([...prev.studyDates, today])).sort()
-    }));
+  const buildAnsweredStats = (correct: boolean): StudyStats => {
+    const nextDates = withTodayStudyDate(stats.studyDates, today);
+    return {
+      ...stats,
+      totalAnswers: stats.totalAnswers + 1,
+      correctAnswers: stats.correctAnswers + (correct ? 1 : 0),
+      studyDates: nextDates,
+      ...deriveStreakData(nextDates)
+    };
   };
 
   const applyReviewResult = (wordId: string, correct: boolean): void => {
+    if (!uid) return;
     const now = new Date();
-    setProgress((prev) => {
-      const current = prev[wordId];
-      const nextInterval = correct ? Math.max(1, Math.round((current.intervalDays || 0) * 1.9) || 1) : 0;
-      const nextDue = correct ? addDays(now, nextInterval) : addMinutes(now, 20);
-      return {
-        ...prev,
-        [wordId]: {
-          ...current,
-          intervalDays: nextInterval,
-          dueAt: nextDue.toISOString(),
-          streak: correct ? current.streak + 1 : 0,
-          totalReviews: current.totalReviews + 1,
-          correctReviews: current.correctReviews + (correct ? 1 : 0),
-          lastResult: correct ? "correct" : "wrong"
-        }
-      };
-    });
-    recordAnswer(correct);
+    const current = progress[wordId];
+    if (!current) return;
+
+    const nextInterval = correct ? Math.max(1, Math.round((current.intervalDays || 0) * 1.9) || 1) : 0;
+    const nextDue = correct ? addDays(now, nextInterval) : addMinutes(now, 20);
+    const nextWordProgress: WordProgress = {
+      ...current,
+      intervalDays: nextInterval,
+      dueAt: nextDue.toISOString(),
+      streak: correct ? current.streak + 1 : 0,
+      totalReviews: current.totalReviews + 1,
+      correctReviews: current.correctReviews + (correct ? 1 : 0),
+      lastResult: correct ? "correct" : "wrong"
+    };
+    const nextStats = buildAnsweredStats(correct);
+
+    setProgress((prev) => ({
+      ...prev,
+      [wordId]: nextWordProgress
+    }));
+    setStats(nextStats);
+    void persistProgressAndStats(uid, wordId, nextWordProgress, nextStats);
   };
 
   const nextFlashcard = (): void => {
     setFlipped(false);
-    setFlashIndex((prev) => (prev + 1) % STARTER_WORDS.length);
+    if (words.length > 0) {
+      setFlashIndex((prev) => (prev + 1) % words.length);
+    }
   };
 
   const handleFlashFeedback = (correct: boolean): void => {
+    if (!flashWord) return;
     applyReviewResult(flashWord.id, correct);
     nextFlashcard();
   };
 
   const startQuiz = (): void => {
+    if (words.length === 0) return;
     recordSessionStart();
     setQuizActive(true);
-    setQuizQuestion(makeQuestion(STARTER_WORDS));
+    setQuizQuestion(makeQuestion(words));
     setTypingAnswer("");
     setQuizFeedback("");
   };
 
   const submitQuizAnswer = (value: string): void => {
+    if (!quizQuestion || words.length === 0) return;
     const normalized = value.trim().toLowerCase();
     const expected = quizQuestion.answer.toLowerCase();
     const correct = normalized === expected;
     applyReviewResult(quizQuestion.wordId, correct);
     setQuizFeedback(correct ? "정답입니다! 👍" : `아쉬워요. 정답: ${quizQuestion.answer}`);
-    setQuizQuestion(makeQuestion(STARTER_WORDS));
+    setQuizQuestion(makeQuestion(words));
     setTypingAnswer("");
   };
 
@@ -277,6 +577,17 @@ export default function App() {
     setReviewInput("");
   };
 
+  if (isLoading) {
+    return (
+      <div className="app-shell">
+        <section className="panel">
+          <h2>데이터 준비 중...</h2>
+          <p className="hint">Firebase 인증 및 학습 데이터를 불러오고 있습니다.</p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="top-header">
@@ -287,6 +598,10 @@ export default function App() {
         </div>
         <div className="badge">{today}</div>
       </header>
+
+      {uid && <p className="hint">학습 사용자 ID: {uid.slice(0, 8)}...</p>}
+      {isSaving && <p className="status">저장 중...</p>}
+      {loadError && <p className="alert">{loadError}</p>}
 
       <nav className="tab-row">
         {[
@@ -311,7 +626,7 @@ export default function App() {
           <article className="metric">
             <h3>학습한 단어</h3>
             <p className="value">{learnedCount}</p>
-            <p className="hint">총 {STARTER_WORDS.length}개 중 (연속 정답 3회 이상)</p>
+            <p className="hint">총 {words.length}개 중 (연속 정답 3회 이상)</p>
           </article>
           <article className="metric">
             <h3>오늘 복습 대기</h3>
@@ -335,7 +650,7 @@ export default function App() {
               총 {stats.totalAnswers}문제 중 {stats.correctAnswers}개 정답
             </p>
             <div className="progress-track" aria-hidden>
-              <div className="progress-fill" style={{ width: `${(learnedCount / STARTER_WORDS.length) * 100}%` }} />
+              <div className="progress-fill" style={{ width: `${learnedRate}%` }} />
             </div>
           </article>
         </section>
@@ -345,29 +660,37 @@ export default function App() {
         <section className="panel">
           <h2>플래시카드 학습</h2>
           <p className="hint">카드를 뒤집어 뜻/예문을 확인하고, 기억 정도를 선택하세요.</p>
-          <button className="card" type="button" onClick={() => setFlipped((prev) => !prev)}>
-            <p className="card-count">
-              {flashIndex + 1} / {STARTER_WORDS.length}
-            </p>
-            <h3>{flashWord.english}</h3>
-            {flipped ? (
-              <div className="card-back">
-                <p className="korean">{flashWord.korean}</p>
-                <p>{flashWord.example}</p>
-                <p className="level">{flashWord.level === "basic" ? "기본 단어" : "중급 단어"}</p>
+          {flashWord ? (
+            <>
+              <button className="card" type="button" onClick={() => setFlipped((prev) => !prev)}>
+                <p className="card-count">
+                  {flashIndex + 1} / {words.length}
+                </p>
+                <h3>{flashWord.english}</h3>
+                {flipped ? (
+                  <div className="card-back">
+                    <p className="korean">{flashWord.korean}</p>
+                    <p>{flashWord.example}</p>
+                    <p className="level">{flashWord.level === "basic" ? "기본 단어" : "중급 단어"}</p>
+                  </div>
+                ) : (
+                  <p className="tap-help">탭해서 뜻 보기</p>
+                )}
+              </button>
+              <div className="button-row">
+                <button type="button" className="btn weak" onClick={() => handleFlashFeedback(false)}>
+                  헷갈려요
+                </button>
+                <button type="button" className="btn strong" onClick={() => handleFlashFeedback(true)}>
+                  기억했어요
+                </button>
               </div>
-            ) : (
-              <p className="tap-help">탭해서 뜻 보기</p>
-            )}
-          </button>
-          <div className="button-row">
-            <button type="button" className="btn weak" onClick={() => handleFlashFeedback(false)}>
-              헷갈려요
-            </button>
-            <button type="button" className="btn strong" onClick={() => handleFlashFeedback(true)}>
-              기억했어요
-            </button>
-          </div>
+            </>
+          ) : (
+            <div className="empty">
+              <p>표시할 단어가 없습니다.</p>
+            </div>
+          )}
         </section>
       )}
 
@@ -394,32 +717,38 @@ export default function App() {
           ) : (
             <div className="question-box">
               <p className="question-label">문제</p>
-              <p className="question">{quizQuestion.prompt}</p>
-              {quizMode === "mcq" ? (
-                <div className="options">
-                  {quizQuestion.options.map((option) => (
-                    <button type="button" key={option} className="option" onClick={() => submitQuizAnswer(option)}>
-                      {option}
-                    </button>
-                  ))}
-                </div>
+              {quizQuestion ? (
+                <>
+                  <p className="question">{quizQuestion.prompt}</p>
+                  {quizMode === "mcq" ? (
+                    <div className="options">
+                      {quizQuestion.options.map((option) => (
+                        <button type="button" key={option} className="option" onClick={() => submitQuizAnswer(option)}>
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        submitQuizAnswer(typingAnswer);
+                      }}
+                      className="typing-form"
+                    >
+                      <input
+                        value={typingAnswer}
+                        onChange={(event) => setTypingAnswer(event.target.value)}
+                        placeholder="영어 단어를 입력하세요"
+                      />
+                      <button type="submit" className="btn strong">
+                        제출
+                      </button>
+                    </form>
+                  )}
+                </>
               ) : (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    submitQuizAnswer(typingAnswer);
-                  }}
-                  className="typing-form"
-                >
-                  <input
-                    value={typingAnswer}
-                    onChange={(event) => setTypingAnswer(event.target.value)}
-                    placeholder="영어 단어를 입력하세요"
-                  />
-                  <button type="submit" className="btn strong">
-                    제출
-                  </button>
-                </form>
+                <p className="question">문제를 불러오는 중입니다.</p>
               )}
               {quizFeedback && <p className="feedback">{quizFeedback}</p>}
             </div>

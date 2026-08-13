@@ -14,13 +14,15 @@
 - **플래시카드**: 영어 단어 확인 → 뜻/예문 뒤집기 → 기억 여부 기록
 - **퀴즈**: 객관식 + 타이핑 모드
 - **복습 큐**: 복습 시점이 된 단어를 우선적으로 학습
-- **진행도 저장**: 로컬 스토리지 기반(로그인/외부 API 불필요)
+- **진행도 저장**: Firebase Auth(익명 로그인) + Cloud Firestore
 
 ## 기술 스택
 
 - Vite
 - React + TypeScript
 - CSS (반응형, 모바일 친화 레이아웃)
+- Firebase Authentication (Anonymous)
+- Cloud Firestore (asia-northeast3 / Seoul)
 
 ## 로컬 실행 방법
 
@@ -45,5 +47,13 @@ npm run preview
 
 ## 학습 데이터
 
-- 앱에 25개 스타터 단어가 기본 포함되어 있습니다.
-- 학습 기록은 브라우저 `localStorage`에 저장됩니다.
+- 앱은 Firestore `words/{wordId}`에 스타터 단어(w1~w25)를 사용합니다.
+- 사용자 진척도는 `users/{uid}` 및 `users/{uid}/progress/{wordId}`에 저장됩니다.
+- 첫 실행 시 익명 로그인 후 데이터를 읽고/씁니다.
+- 별도 Node 서버 없이 정적 사이트(GitHub Pages)로 동작합니다.
+
+## Firestore 보안 규칙
+
+- 저장소에 `firestore.rules` 파일이 포함되어 있습니다.
+- 참고: GitHub Pages에서는 Firestore Rules를 배포하지 않습니다.  
+  Firebase Console(또는 Firebase CLI)에서 별도로 게시해야 합니다.

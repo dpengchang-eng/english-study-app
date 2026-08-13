@@ -122,6 +122,22 @@ h1 {
   font-size: 0.9rem;
 }
 
+.status {
+  margin: 8px 0 0;
+  color: #95f2d7;
+  font-size: 0.9rem;
+}
+
+.alert {
+  margin: 8px 0 0;
+  border: 1px solid #7f3f5f;
+  background: #3e1d35;
+  color: #ffd4e4;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 0.9rem;
+}
+
 .progress-track {
   margin-top: 10px;
   width: 100%;

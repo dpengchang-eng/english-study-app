@@ -3,10 +3,7 @@ import { firebaseApp } from "../firebase";
 import type { ConvertErrorCode, SourceLang } from "../types";
 import { CONVERT_WAIT_MS } from "../types";
 
-export const GEMINI_MODEL = "gemini-2.0-flash";
-
-/** Leave time for the REST fallback inside the 30s UI wait. */
-const AI_LOGIC_WAIT_MS = 12_000;
+export const GEMINI_MODEL = "gemini-flash-lite-latest";
 
 const SYSTEM_PROMPT = `You rewrite the user's Chinese or English into authentic, natural American English.
 Keep the meaning. Prefer everyday spoken English: contractions, common idioms, and a natural rhythm.
@@ -90,32 +87,10 @@ function mapThrown(error: unknown): ConvertErrorCode {
   return "gemini_unavailable";
 }
 
-function shouldFallback(result: GeminiResult): boolean {
-  return !result.ok && (result.errorCode === "gemini_unavailable" || result.errorCode === "gemini_timeout");
-}
-
-/** Preferred: Firebase AI Logic + existing Firebase app. Gemini Developer API, not Vertex. */
-async function callAiLogic(text: string, hint?: SourceLang): Promise<GeminiResult> {
-  const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
-  const model = getGenerativeModel(
-    ai,
-    {
-      model: GEMINI_MODEL,
-      systemInstruction: SYSTEM_PROMPT,
-      generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
-    },
-    { timeout: AI_LOGIC_WAIT_MS }
-  );
-  const result = await model.generateContent(USER_PROMPT(text, hint));
-  const out = result.response.text();
-  if (!out.trim()) return { ok: false, errorCode: "parse_error" };
-  return parseGeminiJson(out);
-}
-
-/** Fallback: dedicated Gemini Developer API key. Never use the Firebase browser key here. */
+/** Dedicated Gemini Developer API key. Never use the Firebase browser key here. */
 async function callRestKey(text: string, apiKey: string, hint?: SourceLang): Promise<GeminiResult> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CONVERT_WAIT_MS - AI_LOGIC_WAIT_MS);
+  const timer = setTimeout(() => controller.abort(), CONVERT_WAIT_MS);
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
@@ -151,19 +126,29 @@ async function callRestKey(text: string, apiKey: string, hint?: SourceLang): Pro
   }
 }
 
-export async function rewriteWithGemini(text: string, hint?: SourceLang): Promise<GeminiResult> {
-  let first: GeminiResult;
-  try {
-    first = await callAiLogic(text, hint);
-  } catch (error) {
-    first = { ok: false, errorCode: mapThrown(error) };
-  }
-  if (!shouldFallback(first)) return first;
+/** Firebase AI Logic + existing Firebase app. Same model. Not Vertex. */
+async function callAiLogic(text: string, hint?: SourceLang): Promise<GeminiResult> {
+  const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
+  const model = getGenerativeModel(
+    ai,
+    {
+      model: GEMINI_MODEL,
+      systemInstruction: SYSTEM_PROMPT,
+      generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
+    },
+    { timeout: CONVERT_WAIT_MS }
+  );
+  const result = await model.generateContent(USER_PROMPT(text, hint));
+  const out = result.response.text();
+  if (!out.trim()) return { ok: false, errorCode: "parse_error" };
+  return parseGeminiJson(out);
+}
 
+export async function rewriteWithGemini(text: string, hint?: SourceLang): Promise<GeminiResult> {
   const key = geminiApiKey();
-  if (!key) return first;
   try {
-    return await callRestKey(text, key, hint);
+    if (key) return await callRestKey(text, key, hint);
+    return await callAiLogic(text, hint);
   } catch (error) {
     return { ok: false, errorCode: mapThrown(error) };
   }

@@ -13,7 +13,20 @@ v1.1 (not in this PR): tabs, listen, word tap, wordbook, cloze, review, bind Goo
 ## Screens
 
 1. **Home** — text box, hold-to-record (release only fills the box), Convert, offline disables convert, last 20 local conversions.
-2. **Result** — original text + sentences as plain text. Waits 30 seconds (same as `convertText`). After 30s shows `gemini_timeout`. `quota_exceeded` shows 「今天的转换次数用完了」 (and 「绑定后每天 80 次」 if still anonymous) with 回首页, no Retry. Other `errorCode`s have their own Result copy. Actions on success: copy all, convert again. No Play button. No tappable words. Home does not show remaining quota.
+2. **Result** — original text + sentences as plain text. Waits 30 seconds (same as `convertText`). After 30s with no response: `gemini_timeout`. Unknown `errorCode`s use `parse_error`. Actions on success: copy all, convert again. No Play button. No tappable words. Home does not show remaining quota.
+
+Locked Result errors (branch on `errorCode` from payload or HttpsError details):
+
+| errorCode | Copy | Action |
+| --- | --- | --- |
+| `quota_exceeded` | 今天的转换次数用完了 (+ 绑定后每天 80 次 if anonymous) | 回首页 |
+| `input_empty` | 先输入一句话 | 回首页 |
+| `input_too_long` | 这段太长了，缩短一点 | 回首页 |
+| `input_invalid` | 这段没法转，换个说法 | 回首页 |
+| `gemini_timeout` | 网有点慢，再试一次 | Retry |
+| `gemini_unavailable` | 这会儿转不了，稍后再试 | Retry |
+| `safety` | 这段内容转不了，换一句 | 回首页 (do not retry the same text) |
+| `parse_error` | 这次没转成，再试一次 | Retry |
 
 Components: `ComposeCard`, `MicButton`, `OfflineBanner`, `HistoryRow`, `SentenceList`, `ErrorState`, `EmptyHint`.
 

@@ -37,11 +37,19 @@ export const RECENT_CAP = 20;
 
 export const ERROR_COPY: Record<ConvertErrorCode, string> = {
   quota_exceeded: "今天的转换次数用完了",
-  input_empty: "请先输入内容。",
-  input_too_long: "文字太长。",
-  input_invalid: "输入无效。",
-  gemini_timeout: "模型超时，请再试。",
-  gemini_unavailable: "模型暂时不可用，请稍后再试。",
-  safety: "内容被安全策略拦截。",
-  parse_error: "结果解析失败，请再试。"
+  input_empty: "先输入一句话",
+  input_too_long: "这段太长了，缩短一点",
+  input_invalid: "这段没法转，换个说法",
+  gemini_timeout: "网有点慢，再试一次",
+  gemini_unavailable: "这会儿转不了，稍后再试",
+  safety: "这段内容转不了，换一句",
+  parse_error: "这次没转成，再试一次"
 };
+
+export const ERROR_GO_HOME: ConvertErrorCode[] = [
+  "quota_exceeded",
+  "input_empty",
+  "input_too_long",
+  "input_invalid",
+  "safety"
+];

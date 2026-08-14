@@ -1,7 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 import { CONVERT_WAIT_MS, ERROR_COPY, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
-import { errorCodeFromHttpsError, errorCodeFromPayload } from "./convertError";
+import { errorCodeFromHttpsError, errorCodeFromPayload, resolveErrorCode } from "./convertError";
 
 export type ConvertCallInput = {
   text: string;
@@ -40,7 +40,12 @@ export function mapConvertOutput(
     outputText: output.outputText ?? "",
     sentences,
     status: output.status === "ready" ? "ready" : "failed",
-    errorCode: output.errorCode
+    errorCode:
+      output.errorCode != null
+        ? resolveErrorCode(output.errorCode)
+        : output.status === "failed"
+          ? "parse_error"
+          : undefined
   };
 }
 
@@ -70,16 +75,11 @@ async function callConvert(input: ConvertCallInput): Promise<ConvertCallOutput> 
     const data = result.data;
     const errorCode = errorCodeFromPayload(data);
     if (errorCode || data.status === "failed") {
-      return { ...data, status: "failed", errorCode: errorCode ?? data.errorCode };
+      return { ...data, status: "failed", errorCode: errorCode ?? "parse_error" };
     }
     return data;
   } catch (error) {
-    const fromDetails = errorCodeFromHttpsError(error);
-    if (fromDetails) return failed(fromDetails);
-    const code = typeof error === "object" && error && "code" in error ? String((error as { code: string }).code) : "";
-    if (code.includes("unauthenticated")) return failed("input_invalid");
-    if (code.includes("deadline-exceeded") || code.includes("timeout")) return failed("gemini_timeout");
-    return failed("gemini_unavailable");
+    return failed(errorCodeFromHttpsError(error) ?? "parse_error");
   }
 }
 

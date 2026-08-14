@@ -1,18 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { ConvertErrorCode } from "../types";
-import { ERROR_COPY } from "../types";
+import { ERROR_COPY, ERROR_GO_HOME } from "../types";
+import { resolveErrorCode } from "../services/convertError";
 import { colors, space } from "../theme";
-
-const TITLES: Record<ConvertErrorCode, string> = {
-  quota_exceeded: "今天的转换次数用完了",
-  input_empty: "请先输入内容",
-  input_too_long: "文字太长",
-  input_invalid: "输入无效",
-  gemini_timeout: "转换超时",
-  gemini_unavailable: "模型暂时不可用",
-  safety: "内容被安全策略拦截",
-  parse_error: "结果解析失败"
-};
 
 export function ErrorState({
   errorCode,
@@ -25,25 +15,22 @@ export function ErrorState({
   onRetry: () => void;
   onGoHome: () => void;
 }) {
-  if (errorCode === "quota_exceeded") {
-    return (
-      <View style={styles.box}>
-        <Text style={styles.title}>今天的转换次数用完了</Text>
-        {isAnonymous ? <Text style={styles.body}>绑定后每天 80 次</Text> : null}
-        <Pressable style={styles.btn} onPress={onGoHome}>
-          <Text style={styles.btnText}>回首页</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const code = resolveErrorCode(errorCode);
+  const goHome = ERROR_GO_HOME.includes(code);
 
   return (
     <View style={styles.box}>
-      <Text style={styles.title}>{errorCode ? TITLES[errorCode] : "转换失败"}</Text>
-      <Text style={styles.body}>{errorCode ? ERROR_COPY[errorCode] : "转换失败。"}</Text>
-      <Pressable style={styles.btn} onPress={onRetry}>
-        <Text style={styles.btnText}>再转一次</Text>
-      </Pressable>
+      <Text style={styles.title}>{ERROR_COPY[code]}</Text>
+      {code === "quota_exceeded" && isAnonymous ? <Text style={styles.body}>绑定后每天 80 次</Text> : null}
+      {goHome ? (
+        <Pressable style={styles.btn} onPress={onGoHome}>
+          <Text style={styles.btnText}>回首页</Text>
+        </Pressable>
+      ) : (
+        <Pressable style={styles.btn} onPress={onRetry}>
+          <Text style={styles.btnText}>再试一次</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

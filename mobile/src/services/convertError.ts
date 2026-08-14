@@ -17,6 +17,10 @@ export function asConvertErrorCode(value: unknown): ConvertErrorCode | undefined
     : undefined;
 }
 
+export function resolveErrorCode(value: unknown): ConvertErrorCode {
+  return asConvertErrorCode(value) ?? "parse_error";
+}
+
 function detailsFromError(error: object): unknown {
   if ("details" in error) return (error as { details: unknown }).details;
   if ("customData" in error) {
@@ -27,18 +31,20 @@ function detailsFromError(error: object): unknown {
 }
 
 function errorCodeFromDetails(details: unknown): ConvertErrorCode | undefined {
-  if (typeof details === "string") return asConvertErrorCode(details);
+  if (typeof details === "string") return resolveErrorCode(details);
   if (!details || typeof details !== "object") return undefined;
   const row = details as Record<string, unknown>;
-  return asConvertErrorCode(row.errorCode) ?? asConvertErrorCode(row.code);
+  if (row.errorCode != null) return resolveErrorCode(row.errorCode);
+  return asConvertErrorCode(row.code);
 }
 
-/** Branch on errorCode. Do not treat functions/resource-exhausted as quota by itself. */
+/** Branch on errorCode. Unknown codes become parse_error. Do not infer from Firebase codes. */
 export function errorCodeFromHttpsError(error: unknown): ConvertErrorCode | undefined {
   if (!error || typeof error !== "object") return undefined;
   return errorCodeFromDetails(detailsFromError(error));
 }
 
 export function errorCodeFromPayload(payload: { errorCode?: unknown; status?: unknown }): ConvertErrorCode | undefined {
-  return asConvertErrorCode(payload.errorCode);
+  if (payload.errorCode == null) return undefined;
+  return resolveErrorCode(payload.errorCode);
 }

@@ -56,7 +56,11 @@ export function LookupScreen() {
         ipa,
         senses: senses.slice(0, 3)
       });
-      setSaved(result.created ? "已加入词本" : "已在词本");
+      if (!result.created) {
+        setSaved("已在词本");
+        return;
+      }
+      setSaved(result.item.syncState === "error" ? "已加入词本，云同步失败" : "已加入词本");
     } catch {
       setSaved("只能存 1 到 6 个连续单词");
     }
@@ -89,7 +93,7 @@ export function LookupScreen() {
         </Pressable>
       </View>
       {speakError ? <Text style={styles.warn}>{speakError}</Text> : null}
-      {saved ? <Text style={styles.note}>{saved}</Text> : null}
+      {saved ? <Text style={saved.includes("失败") ? styles.warn : styles.note}>{saved}</Text> : null}
       <Pressable onPress={() => navigation.goBack()}>
         <Text style={styles.close}>关闭</Text>
       </Pressable>

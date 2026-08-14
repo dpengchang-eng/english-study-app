@@ -34,15 +34,20 @@ export function ClozeScreen() {
 
   useEffect(() => {
     let live = true;
+    const hang = setTimeout(() => {
+      if (live) setSession((current) => current ?? { sessionId: "local", cards: [] });
+    }, 10_000);
     void createPractice(uid, itemsRef.current)
       .then((next) => {
         if (live) setSession(next);
       })
       .catch(() => {
         if (live) setSession({ sessionId: "local", cards: [] });
-      });
+      })
+      .finally(() => clearTimeout(hang));
     return () => {
       live = false;
+      clearTimeout(hang);
       clearPracticeAnswers();
     };
   }, [uid]);

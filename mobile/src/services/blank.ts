@@ -7,6 +7,16 @@ function indexInsensitive(hay: string, needle: string): number {
   return hay.toLowerCase().indexOf(needle.toLowerCase());
 }
 
+/** Missing Gemini offsets must not become 0..phrase.length. */
+export function offsetsFromTokens(tokens: Array<{ charStart?: number; charEnd?: number }>): { start: number; end: number } {
+  const start = tokens[0]?.charStart;
+  const end = tokens[tokens.length - 1]?.charEnd;
+  if (typeof start === "number" && typeof end === "number" && Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start) {
+    return { start, end };
+  }
+  return { start: -1, end: -1 };
+}
+
 /** If saved offsets miss the phrase (Gemini tokens often lack them), find the phrase in the sentence. */
 export function resolveBlankSpan(
   sentence: string,

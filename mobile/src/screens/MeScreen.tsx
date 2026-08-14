@@ -19,10 +19,11 @@ function Row({ label, value }: { label: string; value: number }) {
 
 export function MeScreen() {
   const { uid, isAnonymous, email } = useAuth();
-  const { recents } = useAppState();
+  const { online, recents } = useAppState();
   const { items, dueCount } = useWordbook();
   const [stored, setStored] = useState(0);
-  const { busy, error, bindGoogle } = useGoogleBind(() => undefined);
+  const { busy, error, bindGoogle } = useGoogleBind();
+  const bindDisabled = !online || busy;
 
   useFocusEffect(
     useCallback(() => {
@@ -47,7 +48,7 @@ export function MeScreen() {
         </>
       ) : (
         <>
-          <Text style={styles.body}>{email || "已绑定 Google"}</Text>
+          {email ? <Text style={styles.body}>{email}</Text> : null}
           <Text style={styles.muted}>数据在云端</Text>
         </>
       )}
@@ -56,11 +57,11 @@ export function MeScreen() {
       <Row label="待复习数" value={dueCount} />
       {isAnonymous ? (
         <Pressable
-          style={[styles.btn, busy ? styles.btnOff : null]}
+          style={[styles.btn, bindDisabled ? styles.btnOff : null]}
           onPress={() => void bindGoogle()}
-          disabled={busy}
+          disabled={bindDisabled}
         >
-          <Text style={styles.btnText}>{busy ? "绑定中…" : "绑定 Google"}</Text>
+          <Text style={styles.btnText}>绑定 Google</Text>
         </Pressable>
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}

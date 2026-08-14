@@ -1,3 +1,6 @@
+export const GOOGLE_ALREADY_USED = "这个 Google 已经用过了";
+export const GOOGLE_BIND_FAIL = "没绑上，再试一次";
+
 export type GoogleLinkFailure = {
   ok: false;
   cancelled?: boolean;
@@ -13,7 +16,11 @@ export function firebaseErrorCode(error: unknown): string {
 
 export function mapGoogleLinkError(error: unknown): GoogleLinkFailure {
   const code = firebaseErrorCode(error);
-  if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+  if (
+    code === "auth/popup-closed-by-user" ||
+    code === "auth/cancelled-popup-request" ||
+    code === "auth/user-cancelled"
+  ) {
     return { ok: false, cancelled: true, message: "" };
   }
   if (
@@ -21,12 +28,9 @@ export function mapGoogleLinkError(error: unknown): GoogleLinkFailure {
     code === "auth/email-already-in-use" ||
     code === "auth/account-exists-with-different-credential"
   ) {
-    return {
-      ok: false,
-      message: "这个 Google 账号已绑定其他用户。换一个账号再试，当前词本还在。"
-    };
+    return { ok: false, message: GOOGLE_ALREADY_USED };
   }
-  return { ok: false, message: "绑定失败，请再试一次。" };
+  return { ok: false, message: GOOGLE_BIND_FAIL };
 }
 
 export function googleWebClientId(): string {

@@ -61,11 +61,12 @@ SRS: Again → box 0, due in 60s. Good → 1 day, then 3 days, then 7 days.
 
 ## 我的
 
-Unbound: **未绑定**, **数据只在这台设备**, three read-only rows (今日剩余转换 / 词本数 / 待复习数), plus **绑定 Google**.
+Locked copy:
 
-Bound: Google email and **数据在云端**. Same three rows. No login wall. No Apple this cut.
-
-Binding uses `linkWithCredential` (Expo Go / `expo-auth-session`) or `linkWithPopup` (web) on the **current anonymous user**. It must not `signIn` a new uid (that would hide the wordbook). If that Google account already belongs to another Firebase user, show a Chinese error and stay on the current uid.
+- Unbound: **未绑定** + **数据只在这台设备** + button **绑定 Google**. Three read-only rows stay. Offline: button disabled.
+- Bound: Google email + **数据在云端**. No logout. No login wall. No Apple.
+- Success: swap this state in place. Same anonymous uid (`linkWithCredential` / `linkWithPopup`). Never `signIn` a new empty account.
+- Cancel: no toast. Fail: **没绑上，再试一次**. Google already used by another Firebase user: **这个 Google 已经用过了** — do not switch uid, do not wipe the wordbook.
 
 ## Google bind (Expo Go)
 

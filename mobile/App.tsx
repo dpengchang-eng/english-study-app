@@ -43,7 +43,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
-        <AuthProvider value={profile}>
+        <AuthProvider value={profile} setValue={setProfile}>
           <AppStateProvider uid={profile.uid}>
             <WordbookProvider uid={profile.uid} linked={!profile.isAnonymous}>
               <StatusBar style="dark" />

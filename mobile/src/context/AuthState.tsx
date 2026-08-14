@@ -6,13 +6,28 @@ export type AuthProfile = {
   email: string | null;
 };
 
-const AuthContext = createContext<AuthProfile | null>(null);
+type AuthValue = AuthProfile & {
+  markLinked: (email: string | null) => void;
+};
 
-export function AuthProvider({ value, children }: { value: AuthProfile; children: ReactNode }) {
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+const AuthContext = createContext<AuthValue | null>(null);
+
+export function AuthProvider({
+  value,
+  setValue,
+  children
+}: {
+  value: AuthProfile;
+  setValue: (next: AuthProfile) => void;
+  children: ReactNode;
+}) {
+  const markLinked = (email: string | null): void => {
+    setValue({ uid: value.uid, isAnonymous: false, email });
+  };
+  return <AuthContext.Provider value={{ ...value, markLinked }}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth(): AuthProfile {
+export function useAuth(): AuthValue {
   const value = useContext(AuthContext);
   if (!value) throw new Error("useAuth 必须在 AuthProvider 里用");
   return value;

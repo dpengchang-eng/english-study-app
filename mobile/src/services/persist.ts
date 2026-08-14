@@ -4,7 +4,7 @@ import type { ConvertErrorCode, SourceLang, SourceType } from "../types";
 import type { StoredSentence } from "./align";
 
 const PROMPT_VERSION = "convert-v1";
-const MODEL = "gemini-2.0-flash";
+const MODEL = "gemini-flash-latest";
 
 export async function persistConversion(
   uid: string,

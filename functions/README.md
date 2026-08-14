@@ -1,6 +1,6 @@
 # 地道 convert v1 (Cloud Functions)
 
-This folder is **not used on Firebase Spark**. The mobile v1 convert path runs on the phone (Firebase AI Logic / `EXPO_PUBLIC_GEMINI_API_KEY`). Do not deploy these functions on the no-cost plan.
+This folder is **not used on Firebase Spark**. The mobile v1 convert path runs on the phone with Firebase AI Logic (existing Firebase app / `apiKey`). Do not deploy these functions on the no-cost plan.
 
 The old locked callable is kept here only as a reference:
 

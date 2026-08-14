@@ -42,16 +42,35 @@ npx expo start
 
 Scan the QR code with Expo Go.
 
-### Gemini (required for live convert)
+### Gemini (Firebase AI Logic)
 
-Convert calls Gemini from the Expo app. It does **not** call a Cloud Function.
+Convert calls Gemini from the Expo app through **Firebase AI Logic**. It does **not** call a Cloud Function. It does **not** need `EXPO_PUBLIC_GEMINI_API_KEY`.
 
-1. Prefer **Firebase AI Logic** on project `english-study-app-c645a` (Gemini Developer API). In Firebase Console: Build → Firebase AI Logic → enable Gemini Developer API. No extra key in the app if this works.
-2. If AI Logic is not enabled, copy `.env.example` to `.env` and set `EXPO_PUBLIC_GEMINI_API_KEY`. Restart with `npx expo start -c`.
+The app uses the existing Firebase web config / `apiKey` on project `english-study-app-c645a`:
 
-Never commit `.env` or the real key.
+```ts
+getAI(app, { backend: googleAIBackend() })
+```
 
-If Gemini is not configured, tap **没有 Gemini 时，加载示例**.
+That is the Gemini Developer API backend, not Vertex.
+
+If convert fails locally, tap **没有 Gemini 时，加载示例**.
+
+### App Check debug token (Expo / local)
+
+AI Logic auto-enforces App Check. Local Expo / Expo Go uses the **debug provider**, not Play Integrity or App Attest. Do not block v1 on a production attestation setup.
+
+1. Open Firebase Console → App Check → the **web** app for `english-study-app-c645a` → Manage debug tokens.
+2. Add a debug token (or copy the one Metro prints: `App Check debug token: …`).
+3. Copy `mobile/.env.example` to `mobile/.env` and set:
+
+```
+EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN=your-debug-token
+```
+
+4. Restart with `npx expo start -c`.
+
+In `__DEV__`, the SDK also generates a token and logs it if the env var is empty. Register that token or requests are rejected. Never commit `.env` or the real token.
 
 Daily quota: **20/day** on the device, Asia/Seoul day. Not enforced by Firestore rules. The counter is stored locally and on `users/{uid}.quota`. Home does not show remaining quota.
 

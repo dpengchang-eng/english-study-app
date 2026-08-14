@@ -130,7 +130,7 @@ async function persistFailure(input: ConvertCallInput, errorCode: ConvertErrorCo
   });
 }
 
-/** On-device convert. Does not call the convertText Cloud Function. */
+/** On-device convert via Firebase AI Logic. Does not call a Cloud Function. */
 export async function convertText(input: ConvertCallInput): Promise<ConvertCallOutput> {
   const cleaned = clean(input);
   if ("errorCode" in cleaned && cleaned.status === "failed") {

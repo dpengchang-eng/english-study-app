@@ -1,6 +1,6 @@
 import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { initializeAppCheck, CustomProvider } from "firebase/app-check";
+import { CustomProvider, initializeAppCheck } from "firebase/app-check";
 import { getAuth, initializeAuth, type Auth, type Persistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -15,6 +15,46 @@ const firebaseConfig = {
 };
 
 export const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+type AppCheckGlobal = {
+  FIREBASE_APPCHECK_DEBUG_TOKEN?: string | boolean;
+};
+
+function appCheckDebugToken(): string | boolean | undefined {
+  const fromEnv = process.env.EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+  if (typeof __DEV__ !== "undefined" && __DEV__) return true;
+  return undefined;
+}
+
+/** App Check reads FIREBASE_APPCHECK_DEBUG_TOKEN from the JS global before init. */
+function installAppCheckDebugToken(token: string | boolean): void {
+  (globalThis as AppCheckGlobal).FIREBASE_APPCHECK_DEBUG_TOKEN = token;
+}
+
+/**
+ * AI Logic auto-enforces App Check. Expo / local uses the debug provider.
+ * Production Play Integrity / App Attest is not required for this v1 PR.
+ */
+function initAppCheck(): void {
+  const debugToken = appCheckDebugToken();
+  if (debugToken === undefined) return;
+  installAppCheckDebugToken(debugToken);
+  try {
+    initializeAppCheck(firebaseApp, {
+      provider: new CustomProvider({
+        getToken: async () => {
+          throw new Error("App Check debug provider should supply the token");
+        }
+      }),
+      isTokenAutoRefreshEnabled: true
+    });
+  } catch {
+    // already initialized
+  }
+}
+
+initAppCheck();
 
 function reactNativePersistence(): Persistence | undefined {
   const authModule = require("firebase/auth") as {
@@ -36,20 +76,3 @@ function createAuth(): Auth {
 
 export const auth = createAuth();
 export const db = getFirestore(firebaseApp);
-
-const appCheckDebugToken = process.env.EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN?.trim();
-if (appCheckDebugToken) {
-  try {
-    initializeAppCheck(firebaseApp, {
-      provider: new CustomProvider({
-        getToken: async () => ({
-          token: appCheckDebugToken,
-          expireTimeMillis: Date.now() + 60 * 60 * 1000
-        })
-      }),
-      isTokenAutoRefreshEnabled: true
-    });
-  } catch {
-    // already initialized
-  }
-}

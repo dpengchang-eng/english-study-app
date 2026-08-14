@@ -16,6 +16,7 @@ Detect sourceLang as zh, en, mixed, or unknown${hint ? ` (hint: ${hint})` : ""}.
 Split the rewrite into sentences.
 For each sentence, return coarse tokens with surface, lemma, pos, and isWord.
 Do not include character offsets.
+Return a JSON object with keys: sourceLang, outputText (the full rewritten English text), and sentences.
 
 Text:
 ${text}`;

@@ -7,25 +7,31 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import { auth } from "./src/firebase";
 import { AppStateProvider } from "./src/context/AppState";
+import { AuthProvider, profileFromUser, type AuthProfile } from "./src/context/AuthState";
 import { WordbookProvider } from "./src/context/WordbookState";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { colors } from "./src/theme";
 
 export default function App() {
-  const [uid, setUid] = useState<string | null>(null);
+  const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) setUid(user.uid);
-    });
-    void signInAnonymously(auth).catch(() => {
-      setBootError("匿名登录失败。请检查网络后重启应用。");
+      if (user) {
+        setProfile(profileFromUser(user));
+        return;
+      }
+      // Only create an anonymous user when none is stored. Never sign in again
+      // after Google link — that would mint a new uid and hide the wordbook.
+      void signInAnonymously(auth).catch(() => {
+        setBootError("匿名登录失败。请检查网络后重启应用。");
+      });
     });
     return unsub;
   }, []);
 
-  if (!uid) {
+  if (!profile) {
     return (
       <View style={styles.center}>
         <Text style={styles.brand}>地道</Text>
@@ -37,12 +43,14 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
-        <AppStateProvider uid={uid}>
-          <WordbookProvider uid={uid}>
-            <StatusBar style="dark" />
-            <RootNavigator />
-          </WordbookProvider>
-        </AppStateProvider>
+        <AuthProvider value={profile}>
+          <AppStateProvider uid={profile.uid}>
+            <WordbookProvider uid={profile.uid} linked={!profile.isAnonymous}>
+              <StatusBar style="dark" />
+              <RootNavigator />
+            </WordbookProvider>
+          </AppStateProvider>
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

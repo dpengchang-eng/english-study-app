@@ -3,7 +3,7 @@ import NetInfo from "@react-native-community/netinfo";
 import * as Crypto from "expo-crypto";
 import { convertText, mapConvertOutput } from "../services/convert";
 import { loadRecents, mergeRecent, saveRecents } from "../services/history";
-import type { Conversion, SourceLang, SourceType } from "../types";
+import type { Conversion, ConvertErrorCode, SourceLang, SourceType } from "../types";
 
 type AppStateValue = {
   uid: string;
@@ -12,6 +12,7 @@ type AppStateValue = {
   getConversion: (id: string) => Conversion | undefined;
   startConversion: (text: string, options: { sourceType: SourceType; sourceLangHint?: SourceLang }) => string;
   convertAgain: (id: string) => string | undefined;
+  failIfLoading: (id: string, errorCode: ConvertErrorCode) => void;
 };
 
 const AppStateContext = createContext<AppStateValue | null>(null);
@@ -54,17 +55,24 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
         sourceLangHint: options.sourceLangHint,
         clientRequestId: options.clientRequestId
       });
-      upsert(
-        mapConvertOutput(output, {
-          id: localId,
-          clientRequestId: options.clientRequestId,
-          sourceType: options.sourceType,
-          sourceText: text,
-          createdAt: options.createdAt
-        })
-      );
+      setRecents((prev) => {
+        const current = prev.find((item) => item.id === localId);
+        if (current?.status === "failed") return prev;
+        const next = mergeRecent(
+          prev,
+          mapConvertOutput(output, {
+            id: localId,
+            clientRequestId: options.clientRequestId,
+            sourceType: options.sourceType,
+            sourceText: text,
+            createdAt: options.createdAt
+          })
+        );
+        void saveRecents(uid, next);
+        return next;
+      });
     },
-    [upsert]
+    [uid]
   );
 
   const startConversion = useCallback(
@@ -103,6 +111,19 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
     [recents, startConversion]
   );
 
+  const failIfLoading = useCallback(
+    (id: string, errorCode: ConvertErrorCode) => {
+      setRecents((prev) => {
+        const current = prev.find((item) => item.id === id);
+        if (!current || current.status !== "loading") return prev;
+        const next = mergeRecent(prev, { ...current, status: "failed", errorCode });
+        void saveRecents(uid, next);
+        return next;
+      });
+    },
+    [uid]
+  );
+
   const getConversion = useCallback(
     (id: string): Conversion | undefined => recents.find((item) => item.id === id),
     [recents]
@@ -115,9 +136,10 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
       recents,
       getConversion,
       startConversion,
-      convertAgain
+      convertAgain,
+      failIfLoading
     }),
-    [convertAgain, getConversion, online, recents, startConversion, uid]
+    [convertAgain, failIfLoading, getConversion, online, recents, startConversion, uid]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

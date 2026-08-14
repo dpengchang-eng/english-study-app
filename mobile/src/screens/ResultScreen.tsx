@@ -1,7 +1,7 @@
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Clipboard from "expo-clipboard";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { EmptyHint } from "../components/EmptyHint";
 import { ErrorState } from "../components/ErrorState";
@@ -10,15 +10,23 @@ import { useAppState } from "../context/AppState";
 import { auth } from "../firebase";
 import type { ConvertStackParamList } from "../navigation/types";
 import { colors, space } from "../theme";
+import { CONVERT_WAIT_MS } from "../types";
 
 export function ResultScreen() {
   const route = useRoute<RouteProp<ConvertStackParamList, "Result">>();
   const navigation = useNavigation<NativeStackNavigationProp<ConvertStackParamList>>();
   const { conversionId } = route.params;
-  const { getConversion, convertAgain } = useAppState();
+  const { getConversion, convertAgain, failIfLoading } = useAppState();
   const conversion = getConversion(conversionId);
   const [copied, setCopied] = useState(false);
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
+
+  useEffect(() => {
+    if (!conversion || conversion.status !== "loading") return;
+    const left = CONVERT_WAIT_MS - (Date.now() - conversion.createdAt);
+    const timer = setTimeout(() => failIfLoading(conversionId, "gemini_timeout"), Math.max(0, left));
+    return () => clearTimeout(timer);
+  }, [conversionId, conversion?.status, conversion?.createdAt, failIfLoading]);
 
   if (!conversion) {
     return (

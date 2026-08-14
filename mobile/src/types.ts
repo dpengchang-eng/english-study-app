@@ -32,6 +32,7 @@ export type Conversion = {
 
 export const INPUT_CHAR_CAP = 500;
 export const RECORD_MAX_MS = 30_000;
+export const CONVERT_WAIT_MS = 30_000;
 export const RECENT_CAP = 20;
 
 export const ERROR_COPY: Record<ConvertErrorCode, string> = {

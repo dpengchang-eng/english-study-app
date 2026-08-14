@@ -1,6 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
-import { ERROR_COPY, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
+import { CONVERT_WAIT_MS, ERROR_COPY, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
 import { errorCodeFromHttpsError, errorCodeFromPayload } from "./convertError";
 
 export type ConvertCallInput = {
@@ -52,7 +52,19 @@ function failed(errorCode: ConvertErrorCode): ConvertCallOutput {
   return { conversionId: "", status: "failed", sourceLang: "unknown", outputText: "", sentences: [], errorCode };
 }
 
-export async function convertText(input: ConvertCallInput): Promise<ConvertCallOutput> {
+async function withWait(work: Promise<ConvertCallOutput>): Promise<ConvertCallOutput> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<ConvertCallOutput>((resolve) => {
+    timer = setTimeout(() => resolve(failed("gemini_timeout")), CONVERT_WAIT_MS);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function callConvert(input: ConvertCallInput): Promise<ConvertCallOutput> {
   try {
     const result = await callable(input);
     const data = result.data;
@@ -66,6 +78,11 @@ export async function convertText(input: ConvertCallInput): Promise<ConvertCallO
     if (fromDetails) return failed(fromDetails);
     const code = typeof error === "object" && error && "code" in error ? String((error as { code: string }).code) : "";
     if (code.includes("unauthenticated")) return failed("input_invalid");
+    if (code.includes("deadline-exceeded") || code.includes("timeout")) return failed("gemini_timeout");
     return failed("gemini_unavailable");
   }
+}
+
+export async function convertText(input: ConvertCallInput): Promise<ConvertCallOutput> {
+  return withWait(callConvert(input));
 }

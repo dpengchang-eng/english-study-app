@@ -61,7 +61,7 @@ export async function callGeminiFlash(
   apiKey: string,
   text: string,
   hint?: SourceLang,
-  timeoutMs = 20_000
+  timeoutMs = 30_000
 ): Promise<GeminiResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

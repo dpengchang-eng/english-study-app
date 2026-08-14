@@ -47,7 +47,7 @@ Tap an `isWord` token to open the lookup half-sheet (phonetic + up to 3 Chinese 
 
 `saveToWordbook` writes `users/{uid}/wordbook/{slug(lemma)}` on the client. Only `isWord` tokens, 1–6 consecutive `tokenIds`. If the item already exists, show **已在词本** and do not reset `dueAt` / `box`.
 
-Firestore: signed-in owner can read/write `wordbook` and `practiceSessions` (`isOwner` only).
+Firestore: signed-in owner can read/write `conversions`, `wordbook`, and `practiceSessions` (`isOwner` only). Quota stays on the device, not in rules. `dictCache` is closed. Storage is closed.
 
 ## Cloze + review
 
@@ -93,7 +93,7 @@ One model: `gemini-flash-lite-latest`.
 npx -y firebase-tools@latest deploy --only firestore:rules --project english-study-app-c645a
 ```
 
-These are prototype Security Rules. Please review them before a wide release.
+Locked rules: owner read/write on `users/{uid}` plus `conversions`, `wordbook`, and `practiceSessions`. `dictCache` closed. Quota is on-device (20/80). Do not add extra validation in `firestore.rules`.
 
 ## Typecheck
 

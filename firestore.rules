@@ -1,172 +1,27 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Web flashcard app (keep working):
-    //   words/{wordId}
-    //   users/{userId} study fields: totalSessions, totalAnswers, ...
-    //   users/{userId}/progress/{wordId}
-    //
-    // 地道 convert v1 (Spark, client-side Gemini — no Functions):
-    //   users/{uid}
-    //     createdAt, updatedAt, locale=zh-CN, timezone=Asia/Seoul
-    //     quota.convertCountToday, quota.convertDayKey — client may write
-    //     (20/day Asia/Seoul is enforced on the device, not here)
-    //   users/{uid}/conversions/{id} — create only if request.auth.uid == uid
-    //     field names unchanged: clientRequestId, sourceType, sourceLang,
-    //     sourceText (<=2000), outputText, status ready|failed, errorCode,
-    //     model, promptVersion, createdAt, completedAt,
-    //     sentences (<=15) [{id,index,text,tokens[]}]
-    //     token when present must include id and lemma
-    //
-    // 地道 v1.1 (Spark, client writes):
-    //   users/{uid}/wordbook/{id} — owner read/write
-    //   users/{uid}/practiceSessions/{id} — owner read/write
-    //   users/{uid}/settings/didao
-    //
-    // Google bind (Expo Go) uses linkWithCredential on the anonymous uid.
-    // Same uid keeps wordbook / practiceSessions / conversions. Do not
-    // tighten conversions. Storage stays closed. No Cloud Functions.
-    //
-    // ===============================================================
-
-    function isAuthenticated() {
-      return request.auth != null;
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
-    function validStringLength(field, minLen, maxLen) {
-      return request.resource.data[field] is string
-        && request.resource.data[field].size() >= minLen
-        && request.resource.data[field].size() <= maxLen;
-    }
-
-    function isValidAppSettings(data) {
-      return hasOnlyAllowedFields(['quizSize', 'speechRate', 'cloudVoice'])
-        && data.quizSize in [5, 10, 15]
-        && data.speechRate in ['slow', 'normal', 'fast']
-        && data.cloudVoice is bool;
-    }
-
-    function tokenHasIdLemma(token) {
-      return token.keys().hasAll(['id', 'lemma'])
-        && token.id is string
-        && token.lemma is string;
-    }
-
-    function tokensOk(tokens) {
-      return tokens is list
-        && tokens.size() <= 80
-        && (tokens.size() == 0 || tokenHasIdLemma(tokens[0]))
-        && (tokens.size() < 2 || tokenHasIdLemma(tokens[1]))
-        && (tokens.size() < 3 || tokenHasIdLemma(tokens[2]));
-    }
-
-    function sentenceOk(sentence) {
-      return sentence.id is string
-        && sentence.text is string
-        && (!sentence.keys().hasAny(['tokens']) || tokensOk(sentence.tokens));
-    }
-
-    function sentencesOk(list) {
-      return list.size() <= 15
-        && (list.size() == 0 || sentenceOk(list[0]))
-        && (list.size() < 2 || sentenceOk(list[1]))
-        && (list.size() < 3 || sentenceOk(list[2]))
-        && (list.size() < 4 || sentenceOk(list[3]))
-        && (list.size() < 5 || sentenceOk(list[4]))
-        && (list.size() < 6 || sentenceOk(list[5]))
-        && (list.size() < 7 || sentenceOk(list[6]))
-        && (list.size() < 8 || sentenceOk(list[7]))
-        && (list.size() < 9 || sentenceOk(list[8]))
-        && (list.size() < 10 || sentenceOk(list[9]))
-        && (list.size() < 11 || sentenceOk(list[10]))
-        && (list.size() < 12 || sentenceOk(list[11]))
-        && (list.size() < 13 || sentenceOk(list[12]))
-        && (list.size() < 14 || sentenceOk(list[13]))
-        && (list.size() < 15 || sentenceOk(list[14]));
-    }
-
-    function isLockedErrorCode(code) {
-      return code in [
-        'quota_exceeded', 'input_empty', 'input_too_long', 'input_invalid',
-        'gemini_timeout', 'gemini_unavailable', 'safety', 'parse_error'
-      ];
-    }
-
-    function isValidConversion(data) {
-      return data.sourceText is string
-        && data.sourceText.size() <= 2000
-        && data.outputText is string
-        && data.sentences is list
-        && sentencesOk(data.sentences)
-        && data.createdAt is timestamp
-        && (
-          (data.status == 'ready'
-            && data.sourceText.size() >= 1
-            && data.outputText.size() >= 1
-            && data.sentences.size() >= 1)
-          || (data.status == 'failed' && isLockedErrorCode(data.errorCode))
-        );
-    }
-
-    match /words/{wordId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && !exists(/databases/$(database)/documents/words/$(wordId));
-      allow update, delete: if false;
-    }
-
-    match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId);
+    match /users/{uid} {
+      allow read, create, update: if isOwner(uid);
       allow delete: if false;
 
-      match /progress/{wordId} {
-        allow read, write: if isOwner(userId);
+      match /conversions/{id} {
+        allow read, write: if isOwner(uid);
       }
+      match /wordbook/{id} {
+        allow read, write: if isOwner(uid);
+      }
+      match /practiceSessions/{id} {
+        allow read, write: if isOwner(uid);
+      }
+    }
 
-      match /conversions/{conversionId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create: if request.auth != null
-          && request.auth.uid == userId
-          && isValidConversion(request.resource.data);
-        allow update, delete: if false;
-      }
-
-      match /requests/{clientRequestId} {
-        allow read, write: if false;
-      }
-
-      match /wordbook/{itemId} {
-        allow read, write: if isOwner(userId);
-      }
-
-      match /practiceSessions/{sessionId} {
-        allow read, write: if isOwner(userId);
-      }
-
-      match /settings/{docId} {
-        allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId)
-          && docId == 'didao'
-          && isValidAppSettings(request.resource.data);
-        allow delete: if false;
-      }
-
-      match /savedItems/{itemId} {
-        allow read, delete: if isOwner(userId);
-        allow create, update: if false;
-      }
+    match /dictCache/{id} {
+      allow read, write: if false;
     }
   }
 }

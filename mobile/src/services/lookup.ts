@@ -1,9 +1,15 @@
 import { rewriteLookup } from "./geminiLookup";
 
+export const LOOKUP_FAIL_TEXT = "查词失败，请再试一次";
+
 export type LookupResult = {
   ipa: string;
   senses: string[];
 };
+
+export function isLookupFailure(senses: string[]): boolean {
+  return senses[0] === LOOKUP_FAIL_TEXT;
+}
 
 const LOCAL: Record<string, LookupResult> = {
   coffee: { ipa: "/ˈkɔfi/", senses: ["咖啡", "咖啡豆", "咖啡色"] },
@@ -43,6 +49,6 @@ export async function lookupPhrase(phrase: string, lemma: string): Promise<Looku
     }
     return { ipa: "", senses: ["暂无中文释义"] };
   } catch {
-    return { ipa: "", senses: ["查词失败，请再试一次"] };
+    return { ipa: "", senses: [LOOKUP_FAIL_TEXT] };
   }
 }

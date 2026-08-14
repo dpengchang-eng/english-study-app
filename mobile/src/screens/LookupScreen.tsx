@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
-import { lookupPhrase } from "../services/lookup";
+import { isLookupFailure, LOOKUP_FAIL_TEXT, lookupPhrase } from "../services/lookup";
 import { phraseFromTokens } from "../services/wordbook";
 import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
@@ -37,7 +37,7 @@ export function LookupScreen() {
       .catch(() => {
         if (!live) return;
         setIpa("");
-        setSenses(["查词失败，请再试一次"]);
+        setSenses([LOOKUP_FAIL_TEXT]);
         setLoading(false);
       });
     return () => {
@@ -45,8 +45,11 @@ export function LookupScreen() {
     };
   }, [lemmaKey, phrase]);
 
+  const lookupFailed = isLookupFailure(senses);
+  const saveDisabled = loading || lookupFailed;
+
   const save = async (): Promise<void> => {
-    if (loading) return;
+    if (saveDisabled) return;
     try {
       const result = await savePhrase({
         tokens,
@@ -88,7 +91,7 @@ export function LookupScreen() {
         >
           <Text style={styles.ghostText}>听</Text>
         </Pressable>
-        <Pressable style={[styles.btn, loading && styles.off]} onPress={() => void save()} disabled={loading}>
+        <Pressable style={[styles.btn, saveDisabled && styles.off]} onPress={() => void save()} disabled={saveDisabled}>
           <Text style={styles.btnText}>存入词本</Text>
         </Pressable>
       </View>

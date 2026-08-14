@@ -1,19 +1,21 @@
 # 地道 (mobile)
 
-iOS / Android app that turns Chinese or English into natural American English, then lets you look up words, save them to a wordbook, and practice cloze.
+iOS / Android app that turns Chinese or English into natural American English.
 
 This is a **different product** from the Vite flashcard/quiz web app in the repo root.
 
-## Locked navigation
+## v1 scope
 
-Bottom tabs: **转换 / 词本 / 复习 / 我的**
+Convert only. Navigation is a stack: **Home → Result**. No bottom tabs. No login screen. Silent anonymous Auth on launch.
 
-- **结果** is a stack screen on 转换. Tapping 转换 goes there immediately.
-- **填空** is a full-screen modal. Android back exits.
-- **查词** is a half-sheet shared by 结果 and 词本.
-- 复习 tab shows today's due count.
+v1.1 (not in this PR): tabs, listen, word tap, wordbook, cloze, review, bind Google/Apple.
 
-Chrome is Simplified Chinese. Learning text is English. Portrait only.
+## Screens
+
+1. **Home** — text box, hold-to-record (release only fills the box), Convert, offline disables convert, last 20 local conversions.
+2. **Result** — original text + sentences as plain text. Skeleton / failed / timeout. Actions: copy all, convert again. No Play button. No tappable words.
+
+Components: `ComposeCard`, `MicButton`, `OfflineBanner`, `HistoryRow`, `SentenceList`, `ErrorState`, `EmptyHint`.
 
 ## Run
 
@@ -25,64 +27,31 @@ npx expo start
 
 Scan the QR code with Expo Go.
 
-Convert calls the `convertText` Cloud Function (`asia-northeast3`). Deploy functions first (see [functions/README.md](../functions/README.md)). If the function is not deployed yet, tap **加载示例并立刻看结果** to walk play → lookup → wordbook → cloze.
+Convert calls the locked `convertText` Cloud Function (`asia-northeast3`). Deploy functions first (see [functions/README.md](../functions/README.md)).
 
-### Optional env
+Optional: copy `.env.example` to `.env` and set `EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN` for Expo Go. Do not commit `.env`.
 
-Copy `.env.example` to `.env`:
+STT stays on the device. Audio is never uploaded.
 
-| Variable | When you need it |
-| --- | --- |
-| `EXPO_PUBLIC_GOOGLE_TTS_KEY` | Cloud Neural2 American English |
-| `EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN` | App Check debug token for Expo |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Bind Google on 我的 (later) |
-
-Do not commit `.env`. Restart with `npx expo start -c` after changes.
-
-TTS and STT stay on the device. Audio is never uploaded. `audioStatus` is local UI state only.
-
-## Happy path
-
-1. App signs in anonymously (no prompt). Same uid later binds Google/Apple with `linkWithCredential`.
-2. On **转换**, type a Chinese sentence (max 500 chars) or hold the mic (max 30s, swipe up to cancel). Voice lands in the input box first.
-3. Tap **转换**. The result screen opens immediately. The client does **not** write conversions.
-4. When sentences appear, tap **播放** (准备中 / 播放 / 停止 / 无音频). Audio can arrive later without remounting the page.
-5. Tap a word for the half-sheet (IPA + up to 3 Chinese senses). Add even if lookup fails.
-6. Long-press to multi-select a phrase, then **加入词本**.
-7. On **词本**, swipe left to delete. **练习到期** or **练习已选** opens cloze.
-8. **复习** only starts today's due items.
-9. **我的**: bind later, quiz size, speech rate, cloud-voice. Those last two also write `users/{uid}.settings.ttsRate` / `ttsVoiceHint`.
-
-## Data
-
-Same Firebase project: `english-study-app-c645a`.
-
-Convert v1 (Functions-owned):
+## Data the UI shows
 
 ```
-users/{uid}                      settings client-write; quota/stats Functions-only
-users/{uid}/conversions/{id}     client read-only
-users/{uid}/requests/{id}        Functions-only, 24h TTL
+Conversion { id, createdAt, sourceText, sentences: { id, text }[] }
 ```
 
-Isolated next cut (client-writable, can snap to the backend later):
+The callable may return more (tokens, sourceLang, …). v1 stores the payload but only renders `sentences[].text`.
 
-```
-users/{uid}/wordbook/{id}        dueAt + syncState + blankStart/blankEnd
-users/{uid}/settings/didao       quizSize / speechRate / cloudVoice
-```
+Recent list is the last 20 conversions on this device.
 
-Publish rules:
+## Backend call (unchanged)
 
-```bash
-npx -y firebase-tools@latest deploy --only firestore:rules --project english-study-app-c645a
+```ts
+convertText({ text, sourceType, sourceLangHint?, clientRequestId })
 ```
 
-These are prototype Security Rules. Please review them before a wide release.
+Client UX cap is 500 characters.
 
-## Out of v1
-
-Multi-turn rewrite, streaks/leaderboard, push, wordbook folders, multiple-choice, onboarding carousel, tablet, email/password, grammar page, account merge.
+`errorCode`: `quota_exceeded | input_empty | input_too_long | input_invalid | gemini_timeout | gemini_unavailable | safety | parse_error`
 
 ## Typecheck
 

@@ -1,7 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 import { ERROR_COPY, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
-import { toUiToken } from "./tokens";
 
 export type ConvertCallInput = {
   text: string;
@@ -10,25 +9,16 @@ export type ConvertCallInput = {
   clientRequestId: string;
 };
 
-type ConvertCallOutput = {
+export type ConvertCallOutput = {
   conversionId: string;
   status: "ready" | "failed";
   sourceLang: SourceLang;
   outputText: string;
   sentences: Array<{
-    id: string;
-    index: number;
-    text: string;
-    tokens: Array<{
-      id: string;
-      index: number;
-      surface: string;
-      lemma: string;
-      pos: string;
-      isWord: boolean;
-      charStart: number;
-      charEnd: number;
-    }>;
+    id?: string;
+    index?: number;
+    text?: string;
+    tokens?: unknown[];
   }>;
   errorCode?: ConvertErrorCode;
 };
@@ -41,21 +31,20 @@ export function mapConvertOutput(
 ): Conversion {
   const sentences = (output.sentences ?? []).map((sentence, index) => ({
     id: sentence.id || `s${index}`,
-    index: sentence.index ?? index,
-    text: sentence.text,
-    tokens: (sentence.tokens ?? []).map((token, tokenIndex) => toUiToken(token, tokenIndex))
+    text: String(sentence.text ?? "")
   }));
   return {
     ...base,
-    firestoreId: output.conversionId || undefined,
     sourceLang: output.sourceLang ?? "unknown",
     outputText: output.outputText ?? "",
-    rewrittenText: output.outputText ?? "",
     sentences,
     status: output.status === "ready" ? "ready" : "failed",
-    errorCode: output.errorCode,
-    errorMessage: output.errorCode ? ERROR_COPY[output.errorCode] : undefined
+    errorCode: output.errorCode
   };
+}
+
+export function errorMessage(code?: ConvertErrorCode): string {
+  return code ? ERROR_COPY[code] : "转换失败。";
 }
 
 export async function convertText(input: ConvertCallInput): Promise<ConvertCallOutput> {
@@ -66,9 +55,6 @@ export async function convertText(input: ConvertCallInput): Promise<ConvertCallO
     const code = typeof error === "object" && error && "code" in error ? String((error as { code: string }).code) : "";
     if (code.includes("unauthenticated")) {
       return { conversionId: "", status: "failed", sourceLang: "unknown", outputText: "", sentences: [], errorCode: "input_invalid" };
-    }
-    if (code.includes("failed-precondition") || code.includes("app-check")) {
-      return { conversionId: "", status: "failed", sourceLang: "unknown", outputText: "", sentences: [], errorCode: "gemini_unavailable" };
     }
     return { conversionId: "", status: "failed", sourceLang: "unknown", outputText: "", sentences: [], errorCode: "gemini_unavailable" };
   }

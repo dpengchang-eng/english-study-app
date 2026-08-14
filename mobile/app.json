@@ -35,9 +35,7 @@
           "microphonePermission": "地道需要麦克风来听你说的中文或英文。",
           "speechRecognitionPermission": "地道需要语音识别，把你说的中文或英文转成文字。"
         }
-      ],
-      "expo-web-browser",
-      "expo-apple-authentication"
+      ]
     ]
   }
 }

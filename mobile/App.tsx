@@ -7,7 +7,6 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import { auth } from "./src/firebase";
 import { AppStateProvider } from "./src/context/AppState";
-import { LookupSheet } from "./src/components/LookupSheet";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { colors } from "./src/theme";
 
@@ -40,7 +39,6 @@ export default function App() {
         <AppStateProvider uid={uid}>
           <StatusBar style="dark" />
           <RootNavigator />
-          <LookupSheet />
         </AppStateProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

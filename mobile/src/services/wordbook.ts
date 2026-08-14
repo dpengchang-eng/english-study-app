@@ -3,6 +3,7 @@ import { collection, deleteDoc, doc, getDocs, query, setDoc, Timestamp, where, o
 import { db } from "../firebase";
 import type { SrsBox, Token, WordbookItem } from "../types";
 import { slugLemma } from "./slug";
+import { mergeWordbook } from "./wordbookMerge";
 
 const localKey = (uid: string): string => `didao-wordbook-v1:${uid}`;
 
@@ -102,27 +103,46 @@ function toFirestore(item: WordbookItem): Record<string, unknown> {
   };
 }
 
-export async function loadWordbook(uid: string): Promise<WordbookItem[]> {
+async function readLocal(uid: string): Promise<WordbookItem[]> {
   try {
     const raw = await AsyncStorage.getItem(localKey(uid));
-    const local = raw ? (JSON.parse(raw) as WordbookItem[]) : [];
+    const parsed = raw ? (JSON.parse(raw) as WordbookItem[]) : [];
+    return parsed
+      .map((item) => asItem(item.id, item as unknown as Record<string, unknown>) ?? item)
+      .filter((item): item is WordbookItem => Boolean(item?.id && item.phrase));
+  } catch {
+    return [];
+  }
+}
+
+async function flushPending(uid: string, items: WordbookItem[]): Promise<WordbookItem[]> {
+  const pending = items.filter((item) => item.syncState === "pending" || item.syncState === "error");
+  if (!pending.length) return items;
+  let next = items;
+  for (const item of pending) {
+    try {
+      await setDoc(doc(db, "users", uid, "wordbook", item.id), toFirestore({ ...item, syncState: "synced" }));
+      next = next.map((row) => (row.id === item.id ? { ...row, syncState: "synced" as const } : row));
+    } catch {
+      next = next.map((row) => (row.id === item.id ? { ...row, syncState: "error" as const } : row));
+    }
+  }
+  await writeLocal(uid, next);
+  return next;
+}
+
+export async function loadWordbook(uid: string): Promise<WordbookItem[]> {
+  const local = await readLocal(uid);
+  try {
     const snap = await getDocs(collection(db, "users", uid, "wordbook"));
     const remote = snap.docs
       .map((row) => asItem(row.id, row.data() as Record<string, unknown>))
       .filter((item): item is WordbookItem => item !== null);
-    const byId = new Map<string, WordbookItem>();
-    for (const item of local) byId.set(item.id, asItem(item.id, item as unknown as Record<string, unknown>) ?? item);
-    for (const item of remote) byId.set(item.id, item);
-    const list = [...byId.values()].sort((a, b) => a.dueAt - b.dueAt);
+    const list = mergeWordbook(local, remote);
     await writeLocal(uid, list);
-    return list;
+    return flushPending(uid, list);
   } catch {
-    try {
-      const raw = await AsyncStorage.getItem(localKey(uid));
-      return raw ? (JSON.parse(raw) as WordbookItem[]) : [];
-    } catch {
-      return [];
-    }
+    return local;
   }
 }
 

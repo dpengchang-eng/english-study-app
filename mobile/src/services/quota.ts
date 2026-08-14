@@ -1,22 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../firebase";
+import { SEOUL_TZ, dailyLimit, seoulDayKey } from "./quotaLimits";
 
-export const ANON_DAILY_QUOTA = 20;
-export const SEOUL_TZ = "Asia/Seoul";
-
-export function seoulDayKey(now = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: SEOUL_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(now);
-}
+export { ANON_DAILY_QUOTA, LINKED_DAILY_QUOTA, SEOUL_TZ, dailyLimit, remainingAnon, remainingToday, seoulDayKey } from "./quotaLimits";
 
 type QuotaState = { convertCountToday: number; convertDayKey: string };
 
 const localKey = (uid: string): string => `didao-quota-v1:${uid}`;
+
+export function isLinkedAccount(user = auth.currentUser): boolean {
+  return Boolean(user && !user.isAnonymous);
+}
 
 function normalize(raw: Partial<QuotaState> | undefined, now: Date): QuotaState {
   const dayKey = seoulDayKey(now);
@@ -54,10 +49,6 @@ async function currentQuota(uid: string, now = new Date()): Promise<QuotaState> 
   };
 }
 
-export function remainingAnon(used: number): number {
-  return Math.max(0, ANON_DAILY_QUOTA - Math.max(0, used));
-}
-
 /** Local successful converts today. No remote query. */
 export async function loadLocalSuccessCount(uid: string): Promise<number> {
   const local = await loadLocal(uid, new Date());
@@ -76,7 +67,7 @@ export function countReadyToday(recents: Array<{ id: string; status: string; cre
 
 export async function checkQuota(uid: string): Promise<"ok" | "quota_exceeded"> {
   const state = await currentQuota(uid);
-  return state.convertCountToday >= ANON_DAILY_QUOTA ? "quota_exceeded" : "ok";
+  return state.convertCountToday >= dailyLimit(isLinkedAccount()) ? "quota_exceeded" : "ok";
 }
 
 export async function incrementQuota(uid: string): Promise<void> {

@@ -51,6 +51,7 @@ function WordRow({ item }: { item: WordbookItem }) {
       <Text style={styles.ctx} numberOfLines={2}>
         {item.sentenceContext}
       </Text>
+      {item.syncState !== "synced" ? <Text style={styles.sync}>未同步到云</Text> : null}
     </View>
   );
 }
@@ -70,6 +71,7 @@ const styles = StyleSheet.create({
   ipa: { color: colors.muted },
   sense: { color: colors.ink, fontSize: 15 },
   ctx: { color: colors.muted, fontSize: 13 },
+  sync: { color: colors.warn, fontSize: 13, marginTop: 2 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 14, alignItems: "center" },
   btnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   swipe: {

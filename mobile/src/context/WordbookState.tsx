@@ -21,12 +21,20 @@ type WordbookValue = {
 
 const WordbookContext = createContext<WordbookValue | null>(null);
 
-export function WordbookProvider({ uid, children }: { uid: string; children: ReactNode }) {
+export function WordbookProvider({
+  uid,
+  linked,
+  children
+}: {
+  uid: string;
+  linked: boolean;
+  children: ReactNode;
+}) {
   const [items, setItems] = useState<WordbookItem[]>([]);
 
   useEffect(() => {
     void loadWordbook(uid).then(setItems);
-  }, [uid]);
+  }, [uid, linked]);
 
   const savePhrase = useCallback(
     async (input: SavePhraseInput) => {

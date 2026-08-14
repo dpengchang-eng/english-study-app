@@ -47,7 +47,11 @@ export function LookupScreen() {
         ipa,
         senses: senses.slice(0, 3)
       });
-      setSaved(result.created ? "已加入词本" : "已在词本");
+      if (!result.created) {
+        setSaved("已在词本");
+        return;
+      }
+      setSaved(result.item.syncState === "synced" ? "已加入词本" : "未同步到云");
     } catch {
       setSaved("只能存 1 到 6 个连续单词");
     }
@@ -73,7 +77,7 @@ export function LookupScreen() {
           <Text style={styles.btnText}>存入词本</Text>
         </Pressable>
       </View>
-      {saved ? <Text style={styles.note}>{saved}</Text> : null}
+      {saved ? <Text style={saved === "未同步到云" ? styles.warnNote : styles.note}>{saved}</Text> : null}
       <Pressable onPress={() => navigation.goBack()}>
         <Text style={styles.close}>关闭</Text>
       </Pressable>
@@ -92,5 +96,6 @@ const styles = StyleSheet.create({
   ghost: { backgroundColor: colors.accentSoft, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
   ghostText: { color: colors.ink, fontWeight: "700" },
   note: { color: colors.good, fontSize: 14 },
+  warnNote: { color: colors.warn, fontSize: 14 },
   close: { color: colors.muted, marginTop: 8 }
 });

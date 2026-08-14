@@ -21,4 +21,11 @@ export function mergeWordbookItems(local: WordbookItem[], remote: WordbookItem[]
   return [...byId.values()].sort((a, b) => a.dueAt - b.dueAt);
 }
 
+/** Local deletes stay gone even if the cloud row is still there. */
+export function excludeDeleted(items: WordbookItem[], deletedIds: string[]): WordbookItem[] {
+  if (!deletedIds.length) return items;
+  const gone = new Set(deletedIds);
+  return items.filter((item) => !gone.has(item.id));
+}
+
 export const mergeWordbook = mergeWordbookItems;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { WordbookItem } from "../types";
-import { mergeWordbook, mergeWordbookItems } from "./wordbookMerge";
+import { excludeDeleted, mergeWordbook, mergeWordbookItems } from "./wordbookMerge";
 
 function item(partial: Partial<WordbookItem> & Pick<WordbookItem, "id" | "phrase">): WordbookItem {
   return {
@@ -54,5 +54,11 @@ describe("mergeWordbookItems", () => {
     const remote = [item({ id: "family", phrase: "family", syncState: "synced", dueAt: 9 })];
     const merged = mergeWordbook(local, remote);
     assert.equal(merged.find((row) => row.id === "family")?.syncState, "error");
+  });
+
+  it("does not resurrect a locally deleted word from the cloud", () => {
+    const remote = [item({ id: "dinner", phrase: "dinner", syncState: "synced" })];
+    const merged = excludeDeleted(mergeWordbookItems([], remote), ["dinner"]);
+    assert.equal(merged.length, 0);
   });
 });

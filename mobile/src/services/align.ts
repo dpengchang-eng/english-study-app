@@ -1,4 +1,4 @@
-import { SENTENCE_CAP } from "../types";
+import { SENTENCE_CAP, type Sentence, type Token } from "../types";
 
 type GeminiToken = { surface: string; lemma: string; pos: string; isWord: boolean };
 
@@ -20,11 +20,11 @@ export type StoredSentence = {
   tokens: StoredToken[];
 };
 
-function isWordish(surface: string): boolean {
+export function isWordish(surface: string): boolean {
   return /[A-Za-z0-9]/.test(surface);
 }
 
-function regexRetokenize(sentence: string, sentenceId: string): StoredToken[] {
+export function regexRetokenize(sentence: string, sentenceId: string): StoredToken[] {
   const tokens: StoredToken[] = [];
   const re = /[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+|[^\s]/g;
   let match: RegExpExecArray | null;
@@ -79,7 +79,37 @@ function alignTokens(sentence: string, rawTokens: GeminiToken[], sentenceId: str
       charEnd: from + surface.length
     };
   });
-  return failed ? regexRetokenize(sentence, sentenceId) : aligned;
+  const result = failed ? regexRetokenize(sentence, sentenceId) : aligned;
+  return markWordishIfNone(result, sentence, sentenceId);
+}
+
+function markWordishIfNone(tokens: StoredToken[], sentence: string, sentenceId: string): StoredToken[] {
+  if (tokens.some((token) => token.isWord)) return tokens;
+  const marked = tokens.map((token) => {
+    const word = isWordish(token.surface);
+    return {
+      ...token,
+      isWord: word,
+      pos: word ? (token.pos && token.pos !== "PUNCT" ? token.pos : "X") : token.pos || "PUNCT"
+    };
+  });
+  if (marked.some((token) => token.isWord)) return marked;
+  return sentence.trim() ? regexRetokenize(sentence, sentenceId) : marked;
+}
+
+/** History and Gemini rows: missing tokens or no isWord → same regex as sample.ts. */
+export function ensureTappableTokens(sentence: Pick<Sentence, "id" | "text" | "tokens">): Token[] {
+  const text = sentence.text ?? "";
+  const id = sentence.id || "s0";
+  const raw = Array.isArray(sentence.tokens) ? sentence.tokens : [];
+  if (!raw.length) return regexRetokenize(text, id);
+
+  const tokens = raw.some((token) => token.isWord)
+    ? raw
+    : raw.map((token) => ({ ...token, isWord: isWordish(token.surface) }));
+
+  if (!tokens.some((token) => token.isWord)) return regexRetokenize(text, id);
+  return tokens;
 }
 
 export function buildSentences(raw: Array<{ text?: unknown; tokens?: unknown }>): StoredSentence[] {

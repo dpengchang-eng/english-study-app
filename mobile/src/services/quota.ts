@@ -54,6 +54,26 @@ async function currentQuota(uid: string, now = new Date()): Promise<QuotaState> 
   };
 }
 
+export function remainingAnon(used: number): number {
+  return Math.max(0, ANON_DAILY_QUOTA - Math.max(0, used));
+}
+
+/** Local successful converts today. No remote query. */
+export async function loadLocalSuccessCount(uid: string): Promise<number> {
+  const local = await loadLocal(uid, new Date());
+  return local.convertCountToday;
+}
+
+export function countReadyToday(recents: Array<{ id: string; status: string; createdAt: number }>): number {
+  const day = seoulDayKey();
+  return recents.filter(
+    (item) =>
+      item.status === "ready" &&
+      !item.id.startsWith("sample-") &&
+      seoulDayKey(new Date(item.createdAt)) === day
+  ).length;
+}
+
 export async function checkQuota(uid: string): Promise<"ok" | "quota_exceeded"> {
   const state = await currentQuota(uid);
   return state.convertCountToday >= ANON_DAILY_QUOTA ? "quota_exceeded" : "ok";

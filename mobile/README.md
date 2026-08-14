@@ -4,97 +4,79 @@ iOS / Android app that turns Chinese or English into natural American English.
 
 This is a **different product** from the Vite flashcard/quiz web app in the repo root.
 
-## v1 scope
+## v1.1 scope
 
-Convert only. Navigation is a stack: **Home → Result**. No bottom tabs. No login screen. Silent anonymous Auth on launch.
+Bottom tabs: **转换 / 词本 / 复习 / 我的**. Result is a stack child of 转换. Lookup is a half-sheet. Cloze is a full-screen modal.
 
-This project is on the **Firebase Spark (no-cost) plan**. Cloud Functions cannot be deployed. Convert runs **on the phone**. Do not deploy `functions/`.
+This project is on the **Firebase Spark (no-cost) plan**. Cloud Functions cannot be deployed. Convert, lookup, wordbook, and cloze run **on the phone**. Do not deploy `functions/`. Do not add a custom dev client or prebuild. The app must launch in **Expo Go**.
 
-v1.1 (not in this PR): tabs, listen, word tap, wordbook, cloze, review, bind Google/Apple.
+## Run in Expo Go (no Xcode)
 
-## Screens
-
-1. **Home** — text box, hold-to-record (release only fills the box), Convert, offline disables convert, last 20 local conversions. Home does not show remaining quota.
-2. **Result** — original text + `sentences[].text` only. Waits 30 seconds. After 30s with no response: `gemini_timeout`. Unknown codes use `parse_error`. `input_too_long` only if text > 2000 (UI still caps at 500). Success actions: copy all, convert again. No Play button. No tappable words. The UI never shows raw Gemini errors.
-
-Locked Result errors:
-
-| errorCode | Copy | Action |
-| --- | --- | --- |
-| `quota_exceeded` | 今天的转换次数用完了 (+ 绑定后每天 80 次 if anonymous) | 回首页 |
-| `input_empty` | 先输入一句话 | 回首页 |
-| `input_too_long` | 这段太长了，缩短一点 | 回首页 |
-| `input_invalid` | 这段没法转，换个说法 | 回首页 |
-| `gemini_timeout` | 网有点慢，再试一次 | Retry |
-| `gemini_unavailable` | 这会儿转不了，稍后再试 | Retry |
-| `safety` | 这段内容转不了，换一句 | 回首页 (do not retry the same text) |
-| `parse_error` | 这次没转成，再试一次 | Retry |
-
-Components: `ComposeCard`, `MicButton`, `OfflineBanner`, `HistoryRow`, `SentenceList`, `ErrorState`, `EmptyHint`.
-
-## Run
+On your Mac:
 
 ```bash
+git clone https://github.com/dpengchang-eng/english-study-app.git
+cd english-study-app
+git checkout cursor/fix-expo-web-convert-c236
 cd mobile
 npm install
-npx expo start
+cp .env.example .env
 ```
 
-Scan the QR code with Expo Go.
+Put the project's dedicated **Gemini Developer API key** in `mobile/.env` as `EXPO_PUBLIC_GEMINI_API_KEY`. Never commit `.env`.
 
-### Gemini (Firebase AI Logic)
-
-Convert calls Gemini from the Expo app through **Firebase AI Logic**. It does **not** call a Cloud Function. It does **not** need `EXPO_PUBLIC_GEMINI_API_KEY`.
-
-The app uses the existing Firebase web config / `apiKey` on project `english-study-app-c645a`:
-
-```ts
-getAI(app, { backend: googleAIBackend() })
+```bash
+npx expo start -c
 ```
 
-That is the Gemini Developer API backend, not Vertex.
+Install **Expo Go** on the iPhone. Scan the QR code. You do **not** need Xcode.
 
-If convert fails locally, tap **没有 Gemini 时，加载示例**.
+Expo Go does not include `expo-speech-recognition`. The mic is hidden. Typing convert still works. Listen uses `expo-speech` (system voice). Audio is never uploaded.
 
-### App Check debug token (Expo / local)
+## Convert
 
-AI Logic auto-enforces App Check. Local Expo / Expo Go uses the **debug provider**, not Play Integrity or App Attest. Do not block v1 on a production attestation setup.
+Unchanged from v1: `gemini-flash-lite-latest`, REST key if set, else Firebase AI Logic. UI cap 500. Locked `errorCode`s. 30s timeout. 20/day on-device quota (Asia/Seoul).
 
-1. Open Firebase Console → App Check → the **web** app for `english-study-app-c645a` → Manage debug tokens.
-2. Add a debug token (or copy the one Metro prints: `App Check debug token: …`).
-3. Copy `mobile/.env.example` to `mobile/.env` and set:
+## Listen
 
-```
-EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN=your-debug-token
-```
+Each sentence card has **听**. Call `Speech.speak(sentence.text, { language: "en-US" })`. Ignore `audioStatus` / `audioUrl`. Stop speaking when leaving the screen. Do not add `expo-speech-recognition`.
 
-4. Restart with `npx expo start -c`.
+## Word tap / phrase
 
-In `__DEV__`, the SDK also generates a token and logs it if the env var is empty. Register that token or requests are rejected. Never commit `.env` or the real token.
+Tap an `isWord` token to open the lookup half-sheet (phonetic + up to 3 Chinese senses). Long-press, then tap another word in the same sentence to select up to 6 consecutive words and save a phrase.
 
-Daily quota: **20/day** on the device, Asia/Seoul day. Not enforced by Firestore rules. The counter is stored locally and on `users/{uid}.quota`. Home does not show remaining quota.
+`saveToWordbook` writes `users/{uid}/wordbook/{slug(lemma)}` on the client. Only `isWord` tokens, 1–6 consecutive `tokenIds`. If the item already exists, show **已在词本** and do not reset `dueAt` / `box`.
 
-On failure the client writes `users/{uid}/conversions` with `status=failed` and `errorCode`. Field names stay the same. `sourceText` ≤ 2000, `sentences` ≤ 15. Tokens include `id` and `lemma` when present. Writes only when `request.auth.uid == uid`.
+Firestore: signed-in owner can read/write `wordbook` and `practiceSessions` (`isOwner` only).
 
-### Publish Firestore rules
+## Cloze + review
+
+Only saved wordbook items. Review query is `dueAt <= now`, `orderBy dueAt`. **开始填空** opens a modal.
+
+`createPractice` writes UI cards `{wordbookItemId, sentenceText, blankSpan, hintGloss}` only. No `answer` / `answerNorm` in the UI payload. Answers stay in memory (or a session doc the UI does not use as the question source).
+
+`submitPractice` is the only correctness source. Grade from `correct` / `expected`. The blank is fixed-width (does not match the answer length). `hintGloss` shows only after the first wrong. Two wrongs reveal `result.expected`.
+
+SRS: Again → box 0, due in 60s. Good → 1 day, then 3 days, then 7 days.
+
+## 我的
+
+Placeholder this cut. No Google / Apple bind.
+
+## Gemini
+
+One model: `gemini-flash-lite-latest`.
+
+1. If `EXPO_PUBLIC_GEMINI_API_KEY` is set, call Gemini REST.
+2. Else Firebase AI Logic + App Check debug token (see `.env.example`).
+
+## Publish Firestore rules
 
 ```bash
 npx -y firebase-tools@latest deploy --only firestore:rules --project english-study-app-c645a
 ```
 
 These are prototype Security Rules. Please review them before a wide release.
-
-STT stays on the device. Audio is never uploaded.
-
-## Data the UI shows
-
-```
-Conversion { id, createdAt, sourceText, sentences: { id, text }[] }
-```
-
-The phone may store tokens on the conversion document. v1 UI only renders `sentences[].text`.
-
-Recent list is the last 20 conversions on this device. Successful converts are also written to `users/{uid}/conversions/{id}`.
 
 ## Typecheck
 

@@ -12,9 +12,55 @@ export type ConvertErrorCode =
   | "safety"
   | "parse_error";
 
+export type Token = {
+  id: string;
+  lemma: string;
+  surface: string;
+  isWord: boolean;
+  charStart?: number;
+  charEnd?: number;
+};
+
 export type Sentence = {
   id: string;
   text: string;
+  tokens?: Token[];
+};
+
+export type AudioStatus = "ready" | "pending" | "unavailable";
+
+export type SrsBox = 0 | 1 | 2 | 3;
+
+export type WordbookItem = {
+  id: string;
+  phrase: string;
+  ipa: string;
+  senses: string[];
+  sentenceContext: string;
+  conversionId: string;
+  blankStart: number;
+  blankEnd: number;
+  createdAt: number;
+  dueAt: number;
+  box: SrsBox;
+  intervalDays: 0 | 1 | 3 | 7;
+  lastResult: "again" | "1" | "3" | "7" | null;
+  reviewCount: number;
+  syncState: "synced" | "pending" | "error";
+};
+
+export type PracticeCard = {
+  wordbookItemId: string;
+  sentenceText: string;
+  blankSpan: { start: number; end: number };
+  hintGloss: string;
+};
+
+export type SubmitPracticeResult = {
+  correct: boolean;
+  expected: string;
+  dueAt: number;
+  box: SrsBox;
 };
 
 export type Conversion = {

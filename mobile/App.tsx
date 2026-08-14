@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import { auth } from "./src/firebase";
 import { AppStateProvider } from "./src/context/AppState";
+import { WordbookProvider } from "./src/context/WordbookState";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { colors } from "./src/theme";
 
@@ -37,8 +38,10 @@ export default function App() {
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <AppStateProvider uid={uid}>
-          <StatusBar style="dark" />
-          <RootNavigator />
+          <WordbookProvider uid={uid}>
+            <StatusBar style="dark" />
+            <RootNavigator />
+          </WordbookProvider>
         </AppStateProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -1,0 +1,236 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { collection, deleteDoc, doc, getDocs, query, setDoc, Timestamp, where, orderBy } from "firebase/firestore";
+import { db } from "../firebase";
+import type { SrsBox, Token, WordbookItem } from "../types";
+import { slugLemma } from "./slug";
+
+const localKey = (uid: string): string => `didao-wordbook-v1:${uid}`;
+
+const BOX_DAYS: Record<SrsBox, 0 | 1 | 3 | 7> = { 0: 0, 1: 1, 2: 3, 3: 7 };
+
+function asBox(value: unknown, intervalDays?: unknown): SrsBox {
+  if (value === 1 || value === 2 || value === 3) return value;
+  if (value === 0) return 0;
+  if (intervalDays === 1) return 1;
+  if (intervalDays === 3) return 2;
+  if (intervalDays === 7) return 3;
+  return 0;
+}
+
+function asItem(id: string, raw: Record<string, unknown>): WordbookItem | null {
+  if (typeof raw.phrase !== "string" || !raw.phrase.trim()) return null;
+  const createdAt =
+    raw.createdAt && typeof raw.createdAt === "object" && "toMillis" in raw.createdAt
+      ? Number((raw.createdAt as { toMillis: () => number }).toMillis())
+      : Number(raw.createdAt ?? Date.now());
+  const dueAt =
+    raw.dueAt && typeof raw.dueAt === "object" && "toMillis" in raw.dueAt
+      ? Number((raw.dueAt as { toMillis: () => number }).toMillis())
+      : Number(raw.dueAt ?? Date.now());
+  const box = asBox(raw.box, raw.intervalDays);
+  return {
+    id,
+    phrase: raw.phrase,
+    ipa: typeof raw.ipa === "string" ? raw.ipa : "",
+    senses: Array.isArray(raw.senses) ? raw.senses.filter((item): item is string => typeof item === "string").slice(0, 3) : [],
+    sentenceContext: typeof raw.sentenceContext === "string" ? raw.sentenceContext.slice(0, 760) : raw.phrase,
+    conversionId: typeof raw.conversionId === "string" ? raw.conversionId.slice(0, 80) : "local",
+    blankStart: Number(raw.blankStart ?? 0),
+    blankEnd: Number(raw.blankEnd ?? raw.phrase.length),
+    createdAt,
+    dueAt,
+    box,
+    intervalDays: BOX_DAYS[box],
+    lastResult:
+      raw.lastResult === "again" || raw.lastResult === "1" || raw.lastResult === "3" || raw.lastResult === "7"
+        ? raw.lastResult
+        : null,
+    reviewCount: Number(raw.reviewCount ?? 0),
+    syncState: raw.syncState === "pending" || raw.syncState === "error" ? raw.syncState : "synced"
+  };
+}
+
+export function selectWordTokens(selected: Token[], sentenceTokens: Token[] = selected): Token[] {
+  const words = selected.filter((token) => token.isWord);
+  if (words.length !== selected.length || words.length < 1 || words.length > 6) {
+    throw new Error("只能存 1 到 6 个连续单词");
+  }
+  const ids = new Set(words.map((token) => token.id));
+  const wordIds = sentenceTokens.filter((token) => token.isWord).map((token) => token.id);
+  const positions = words.map((token) => wordIds.indexOf(token.id)).sort((a, b) => a - b);
+  if (positions.some((index) => index < 0)) throw new Error("只能存 1 到 6 个连续单词");
+  for (let i = 1; i < positions.length; i += 1) {
+    if (positions[i] !== positions[i - 1] + 1) throw new Error("只能存 1 到 6 个连续单词");
+  }
+  return wordIds.slice(positions[0], positions[positions.length - 1] + 1).map((id) => {
+    const token = sentenceTokens.find((item) => item.id === id);
+    if (!token?.isWord) throw new Error("只能存 1 到 6 个连续单词");
+    return token;
+  });
+}
+
+export function phraseFromTokens(tokens: Token[]): { phrase: string; lemmaKey: string; start: number; end: number } {
+  const words = tokens.filter((token) => token.isWord);
+  const phrase = words.map((token) => token.surface).join(" ").trim();
+  const lemmaKey = slugLemma(words.map((token) => token.lemma || token.surface).join(" "));
+  const start = words[0]?.charStart ?? 0;
+  const last = words[words.length - 1];
+  const end = last?.charEnd ?? start + phrase.length;
+  return { phrase, lemmaKey, start, end };
+}
+
+async function writeLocal(uid: string, items: WordbookItem[]): Promise<void> {
+  await AsyncStorage.setItem(localKey(uid), JSON.stringify(items));
+}
+
+function toFirestore(item: WordbookItem): Record<string, unknown> {
+  return {
+    phrase: item.phrase.slice(0, 180),
+    ipa: item.ipa.slice(0, 80),
+    senses: item.senses.slice(0, 3),
+    sentenceContext: item.sentenceContext.slice(0, 760),
+    conversionId: item.conversionId.slice(0, 80) || "local",
+    blankStart: item.blankStart,
+    blankEnd: item.blankEnd,
+    createdAt: Timestamp.fromMillis(item.createdAt),
+    dueAt: Timestamp.fromMillis(item.dueAt),
+    box: item.box,
+    intervalDays: item.intervalDays,
+    lastResult: item.lastResult,
+    reviewCount: item.reviewCount,
+    syncState: item.syncState
+  };
+}
+
+export async function loadWordbook(uid: string): Promise<WordbookItem[]> {
+  try {
+    const raw = await AsyncStorage.getItem(localKey(uid));
+    const local = raw ? (JSON.parse(raw) as WordbookItem[]) : [];
+    const snap = await getDocs(collection(db, "users", uid, "wordbook"));
+    const remote = snap.docs
+      .map((row) => asItem(row.id, row.data() as Record<string, unknown>))
+      .filter((item): item is WordbookItem => item !== null);
+    const byId = new Map<string, WordbookItem>();
+    for (const item of local) byId.set(item.id, asItem(item.id, item as unknown as Record<string, unknown>) ?? item);
+    for (const item of remote) byId.set(item.id, item);
+    const list = [...byId.values()].sort((a, b) => a.dueAt - b.dueAt);
+    await writeLocal(uid, list);
+    return list;
+  } catch {
+    try {
+      const raw = await AsyncStorage.getItem(localKey(uid));
+      return raw ? (JSON.parse(raw) as WordbookItem[]) : [];
+    } catch {
+      return [];
+    }
+  }
+}
+
+/** Review query: dueAt <= now, orderBy dueAt. */
+export async function queryDueWordbook(uid: string, now = Date.now()): Promise<WordbookItem[]> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, "users", uid, "wordbook"), where("dueAt", "<=", Timestamp.fromMillis(now)), orderBy("dueAt"))
+    );
+    const remote = snap.docs
+      .map((row) => asItem(row.id, row.data() as Record<string, unknown>))
+      .filter((item): item is WordbookItem => item !== null);
+    if (remote.length) return remote;
+  } catch {
+    // fall back to local
+  }
+  const all = await loadWordbook(uid);
+  return all.filter((item) => item.dueAt <= now).sort((a, b) => a.dueAt - b.dueAt);
+}
+
+export function dueNowCount(items: WordbookItem[], now = Date.now()): number {
+  return items.filter((item) => item.dueAt <= now).length;
+}
+
+export async function saveToWordbook(
+  uid: string,
+  current: WordbookItem[],
+  input: {
+    tokens: Token[];
+    sentenceTokens?: Token[];
+    sentenceText: string;
+    conversionId: string;
+    ipa: string;
+    senses: string[];
+  }
+): Promise<{ items: WordbookItem[]; created: boolean; item: WordbookItem }> {
+  const words = selectWordTokens(input.tokens, input.sentenceTokens ?? input.tokens);
+  const { phrase, lemmaKey, start, end } = phraseFromTokens(words);
+  if (!phrase) throw new Error("没有可保存的词");
+  const existing = current.find((item) => item.id === lemmaKey);
+  if (existing) {
+    return { items: current, created: false, item: existing };
+  }
+  const now = Date.now();
+  const item: WordbookItem = {
+    id: lemmaKey,
+    phrase: phrase.slice(0, 180),
+    ipa: input.ipa.slice(0, 80),
+    senses: input.senses.slice(0, 3),
+    sentenceContext: input.sentenceText.slice(0, 760),
+    conversionId: (input.conversionId || "local").slice(0, 80),
+    blankStart: Math.max(0, start),
+    blankEnd: Math.min(760, Math.max(start, end)),
+    createdAt: now,
+    dueAt: now,
+    box: 0,
+    intervalDays: 0,
+    lastResult: null,
+    reviewCount: 0,
+    syncState: "pending"
+  };
+  const items = [item, ...current];
+  await writeLocal(uid, items);
+  try {
+    await setDoc(doc(db, "users", uid, "wordbook", lemmaKey), toFirestore({ ...item, syncState: "synced" }));
+    item.syncState = "synced";
+    const synced = items.map((row) => (row.id === item.id ? item : row));
+    await writeLocal(uid, synced);
+    return { items: synced, created: true, item };
+  } catch {
+    item.syncState = "error";
+    const failed = items.map((row) => (row.id === item.id ? item : row));
+    await writeLocal(uid, failed);
+    return { items: failed, created: true, item };
+  }
+}
+
+export async function deleteFromWordbook(uid: string, items: WordbookItem[], id: string): Promise<WordbookItem[]> {
+  const list = items.filter((item) => item.id !== id);
+  await writeLocal(uid, list);
+  try {
+    await deleteDoc(doc(db, "users", uid, "wordbook", id));
+  } catch {
+    // local delete still applies if Firestore is missing this row
+  }
+  return list;
+}
+
+export async function updateWordbookSrs(uid: string, items: WordbookItem[], next: WordbookItem): Promise<WordbookItem[]> {
+  const list = items.map((item) => (item.id === next.id ? next : item));
+  await writeLocal(uid, list);
+  try {
+    await setDoc(
+      doc(db, "users", uid, "wordbook", next.id),
+      {
+        dueAt: Timestamp.fromMillis(next.dueAt),
+        box: next.box,
+        intervalDays: next.intervalDays,
+        lastResult: next.lastResult,
+        reviewCount: next.reviewCount,
+        syncState: "synced"
+      },
+      { merge: true }
+    );
+    const synced = list.map((item) => (item.id === next.id ? { ...next, syncState: "synced" as const } : item));
+    await writeLocal(uid, synced);
+    return synced;
+  } catch {
+    return list;
+  }
+}

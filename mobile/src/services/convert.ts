@@ -1,5 +1,5 @@
 import { CONVERT_WAIT_MS, ERROR_COPY, SERVER_TEXT_MAX, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
-import { buildSentences } from "./align";
+import { buildSentences, ensureTappableTokens, isWordish } from "./align";
 import { resolveErrorCode } from "./convertError";
 import { rewriteWithGemini } from "./gemini";
 import { persistConversion } from "./persist";
@@ -26,10 +26,36 @@ export function mapConvertOutput(
   output: ConvertCallOutput,
   base: Pick<Conversion, "id" | "clientRequestId" | "sourceType" | "sourceText" | "createdAt">
 ): Conversion {
-  const sentences = (output.sentences ?? []).map((sentence, index) => ({
-    id: sentence.id || `s${index}`,
-    text: String(sentence.text ?? "")
-  }));
+  const sentences = (output.sentences ?? []).map((sentence, index) => {
+    const id = sentence.id || `s${index}`;
+    const text = String(sentence.text ?? "");
+    const mapped = Array.isArray(sentence.tokens)
+      ? sentence.tokens.flatMap((raw, tokenIndex) => {
+          if (!raw || typeof raw !== "object") return [];
+          const token = raw as Record<string, unknown>;
+          const tokenId = typeof token.id === "string" && token.id ? token.id : `${id}_t${tokenIndex}`;
+          const lemma = typeof token.lemma === "string" ? token.lemma : "";
+          const surface = typeof token.surface === "string" ? token.surface : "";
+          if (!tokenId || (!lemma && !surface)) return [];
+          const wordSurface = surface || lemma;
+          return [
+            {
+              id: tokenId,
+              lemma: lemma || surface.toLowerCase(),
+              surface: wordSurface,
+              isWord: typeof token.isWord === "boolean" ? token.isWord : isWordish(wordSurface),
+              charStart: typeof token.charStart === "number" ? token.charStart : undefined,
+              charEnd: typeof token.charEnd === "number" ? token.charEnd : undefined
+            }
+          ];
+        })
+      : [];
+    return {
+      id,
+      text,
+      tokens: ensureTappableTokens({ id, text, tokens: mapped })
+    };
+  });
   return {
     ...base,
     sourceLang: output.sourceLang ?? "unknown",

@@ -1,8 +1,10 @@
+import "./appCheckDebug";
 import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { CustomProvider, initializeAppCheck } from "firebase/app-check";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAuth, initializeAuth, type Auth, type Persistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { appCheckDebugToken, installAppCheckDebugToken } from "./appCheckDebug";
 
 // Same Firebase web app already used by the GitHub Pages flashcard product.
 const firebaseConfig = {
@@ -16,37 +18,17 @@ const firebaseConfig = {
 
 export const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-type AppCheckGlobal = {
-  FIREBASE_APPCHECK_DEBUG_TOKEN?: string | boolean;
-};
-
-function appCheckDebugToken(): string | boolean | undefined {
-  const fromEnv = process.env.EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN?.trim();
-  if (fromEnv) return fromEnv;
-  if (typeof __DEV__ !== "undefined" && __DEV__) return true;
-  return undefined;
-}
-
-/** App Check reads FIREBASE_APPCHECK_DEBUG_TOKEN from the JS global before init. */
-function installAppCheckDebugToken(token: string | boolean): void {
-  (globalThis as AppCheckGlobal).FIREBASE_APPCHECK_DEBUG_TOKEN = token;
-}
-
 /**
- * AI Logic auto-enforces App Check. Expo / local uses the debug provider.
- * Production Play Integrity / App Attest is not required for this v1 PR.
+ * AI Logic auto-enforces App Check. In debug, set FIREBASE_APPCHECK_DEBUG_TOKEN
+ * on globalThis first, then initialize with ReCaptchaV3Provider (placeholder
+ * site key is enough). The SDK exchanges the debug token for a real JWT.
+ * Do not return the raw debug UUID from a CustomProvider.
  */
 function initAppCheck(): void {
-  const debugToken = appCheckDebugToken();
-  if (debugToken === undefined) return;
-  installAppCheckDebugToken(debugToken);
+  installAppCheckDebugToken(appCheckDebugToken());
   try {
     initializeAppCheck(firebaseApp, {
-      provider: new CustomProvider({
-        getToken: async () => {
-          throw new Error("App Check debug provider should supply the token");
-        }
-      }),
+      provider: new ReCaptchaV3Provider("debug-placeholder-site-key"),
       isTokenAutoRefreshEnabled: true
     });
   } catch {

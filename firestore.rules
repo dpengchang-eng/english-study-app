@@ -1,17 +1,133 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Existing web flashcard app (do not tighten these documents):
+    //
+    // Collection: words/{wordId}
+    // Fields: english, korean, example, level
+    // Access: signed-in users can read; first writer may create a missing starter word.
+    //
+    // Collection: users/{userId}
+    // Fields used by the web app: totalSessions, totalAnswers, correctAnswers,
+    //   studyDates, streakCount, lastStudyDate, updatedAt, migratedFromLocalStorage
+    // Access: owner only. Schema stays loose so the existing Vite app keeps working.
+    //
+    // Collection: users/{userId}/progress/{wordId}
+    // Fields: intervalDays, dueAt, streak, totalReviews, correctReviews, lastResult, updatedAt
+    // Access: owner only.
+    //
+    // 地道 mobile app (new subcollections under the same uid):
+    //
+    // Collection: users/{userId}/conversions/{conversionId}
+    // Fields:
+    //   - sourceText: string (required, 1-3500)
+    //   - sourceLang: 'zh' | 'en' | 'mixed'
+    //   - rewrittenText: string (required, 1-7000)
+    //   - sentences: list (required, <= 40) of maps with text + words
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: users/{userId}/savedItems/{itemId}
+    // Fields:
+    //   - phrase: string (required, 1-180, immutable)
+    //   - definition: string (required, <= 480, immutable)
+    //   - sentenceContext: string (required, 1-760, immutable)
+    //   - conversionId: string (required, <= 80, immutable)
+    //   - createdAt: timestamp (required, immutable)
+    //   - dueAt: timestamp (required)
+    //   - intervalDays: 0 | 1 | 3 | 7
+    //   - lastResult: 'again' | '1' | '3' | '7' | null
+    //   - reviewCount: number (>= 0, <= 10000)
+    //
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string
+        && request.resource.data[field].size() >= minLen
+        && request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidConversion(data) {
+      return hasOnlyAllowedFields(['sourceText', 'sourceLang', 'rewrittenText', 'sentences', 'createdAt'])
+        && validStringLength('sourceText', 1, 3500)
+        && data.sourceLang in ['zh', 'en', 'mixed']
+        && validStringLength('rewrittenText', 1, 7000)
+        && data.sentences is list
+        && data.sentences.size() > 0
+        && data.sentences.size() <= 40
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSavedItem(data) {
+      return hasOnlyAllowedFields([
+        'phrase', 'definition', 'sentenceContext', 'conversionId',
+        'createdAt', 'dueAt', 'intervalDays', 'lastResult', 'reviewCount'
+      ])
+        && validStringLength('phrase', 1, 180)
+        && data.definition is string
+        && data.definition.size() <= 480
+        && validStringLength('sentenceContext', 1, 760)
+        && validStringLength('conversionId', 1, 80)
+        && data.createdAt is timestamp
+        && data.dueAt is timestamp
+        && data.intervalDays in [0, 1, 3, 7]
+        && (data.lastResult == null || data.lastResult in ['again', '1', '3', '7'])
+        && data.reviewCount is number
+        && data.reviewCount >= 0
+        && data.reviewCount <= 10000;
+    }
+
+    function savedItemCoreUnchanged() {
+      return request.resource.data.phrase == resource.data.phrase
+        && request.resource.data.definition == resource.data.definition
+        && request.resource.data.sentenceContext == resource.data.sentenceContext
+        && request.resource.data.conversionId == resource.data.conversionId
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
     match /words/{wordId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && !exists(/databases/$(database)/documents/words/$(wordId));
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && !exists(/databases/$(database)/documents/words/$(wordId));
       allow update, delete: if false;
     }
 
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
 
       match /progress/{wordId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isOwner(userId);
+      }
+
+      match /conversions/{conversionId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidConversion(request.resource.data);
+        allow update, delete: if false;
+      }
+
+      match /savedItems/{itemId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidSavedItem(request.resource.data);
+        allow update: if isOwner(userId)
+          && isValidSavedItem(request.resource.data)
+          && savedItemCoreUnchanged();
+        allow delete: if isOwner(userId);
       }
     }
   }

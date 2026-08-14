@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "地道",
+    "slug": "didao",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "地道需要语音识别，把你说的中文或英文转成文字。",
+        "NSMicrophoneUsageDescription": "地道需要麦克风来听你说的中文或英文。"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F4EFE6",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["RECORD_AUDIO"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "地道需要麦克风来听你说的中文或英文。",
+          "speechRecognitionPermission": "地道需要语音识别，把你说的中文或英文转成文字。"
+        }
+      ]
+    ]
+  }
+}

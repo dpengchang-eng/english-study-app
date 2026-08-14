@@ -2,8 +2,15 @@ import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 import { firebaseApp } from "../firebase";
 import type { ConvertErrorCode, SourceLang } from "../types";
 import { CONVERT_WAIT_MS } from "../types";
+import { parseGeminiJson, type GeminiResult } from "./geminiParse";
+
+export type { GeminiPayload, GeminiResult } from "./geminiParse";
+export { parseGeminiJson, parseJsonText } from "./geminiParse";
 
 export const GEMINI_MODEL = "gemini-flash-lite-latest";
+
+/** Hard abort after the UI 30s timeout, so a late JSON can still land. */
+export const GEMINI_HARD_MS = CONVERT_WAIT_MS + 15_000;
 
 const SYSTEM_PROMPT = `You rewrite the user's Chinese or English into authentic, natural American English.
 Keep the meaning. Prefer everyday spoken English: contractions, common idioms, and a natural rhythm.
@@ -21,62 +28,40 @@ Return a JSON object with keys: sourceLang, outputText (the full rewritten Engli
 Text:
 ${text}`;
 
-export type GeminiPayload = {
-  sourceLang: SourceLang;
-  outputText: string;
-  sentences: Array<{ text: string; tokens?: unknown[] }>;
-};
-
-export type GeminiResult = { ok: true; payload: GeminiPayload } | { ok: false; errorCode: ConvertErrorCode };
+const RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    sourceLang: { type: "STRING", enum: ["zh", "en", "mixed", "unknown"] },
+    outputText: { type: "STRING" },
+    sentences: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          text: { type: "STRING" },
+          tokens: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                surface: { type: "STRING" },
+                lemma: { type: "STRING" },
+                pos: { type: "STRING" },
+                isWord: { type: "BOOLEAN" }
+              },
+              required: ["surface", "lemma", "pos", "isWord"]
+            }
+          }
+        },
+        required: ["text"]
+      }
+    }
+  },
+  required: ["sourceLang", "outputText", "sentences"]
+} as const;
 
 function geminiApiKey(): string {
   return process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim() ?? "";
-}
-
-function parseJson(text: string): unknown {
-  const trimmed = text
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```$/i, "")
-    .trim();
-  return JSON.parse(trimmed) as unknown;
-}
-
-function asLang(value: unknown): SourceLang {
-  return value === "zh" || value === "en" || value === "mixed" || value === "unknown" ? value : "unknown";
-}
-
-export function parseGeminiJson(text: string): GeminiResult {
-  try {
-    const raw = parseJson(text);
-    if (!raw || typeof raw !== "object") return { ok: false, errorCode: "parse_error" };
-    const data = raw as Record<string, unknown>;
-    if (!Array.isArray(data.sentences) || data.sentences.length === 0) {
-      return { ok: false, errorCode: "parse_error" };
-    }
-    const fromField =
-      (typeof data.outputText === "string" && data.outputText.trim()) ||
-      (typeof data.rewrite === "string" && data.rewrite.trim()) ||
-      "";
-    const fromSentences = data.sentences
-      .map((row) => (row && typeof row === "object" && "text" in row ? String((row as { text?: unknown }).text ?? "") : ""))
-      .map((text) => text.trim())
-      .filter(Boolean)
-      .join(" ");
-    const outputText = fromField || fromSentences;
-    if (!outputText) return { ok: false, errorCode: "parse_error" };
-    return {
-      ok: true,
-      payload: {
-        sourceLang: asLang(data.sourceLang),
-        outputText,
-        sentences: data.sentences as GeminiPayload["sentences"]
-      }
-    };
-  } catch {
-    return { ok: false, errorCode: "parse_error" };
-  }
 }
 
 function mapThrown(error: unknown): ConvertErrorCode {
@@ -91,7 +76,7 @@ function mapThrown(error: unknown): ConvertErrorCode {
 /** Dedicated Gemini Developer API key. Never use the Firebase browser key here. */
 async function callRestKey(text: string, apiKey: string, hint?: SourceLang): Promise<GeminiResult> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CONVERT_WAIT_MS);
+  const timer = setTimeout(() => controller.abort(), GEMINI_HARD_MS);
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
@@ -102,7 +87,11 @@ async function callRestKey(text: string, apiKey: string, hint?: SourceLang): Pro
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ role: "user", parts: [{ text: USER_PROMPT(text, hint) }] }],
-          generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
+          generationConfig: {
+            temperature: 0.3,
+            responseMimeType: "application/json",
+            responseSchema: RESPONSE_SCHEMA
+          }
         })
       }
     );
@@ -135,9 +124,12 @@ async function callAiLogic(text: string, hint?: SourceLang): Promise<GeminiResul
     {
       model: GEMINI_MODEL,
       systemInstruction: SYSTEM_PROMPT,
-      generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json"
+      }
     },
-    { timeout: CONVERT_WAIT_MS }
+    { timeout: GEMINI_HARD_MS }
   );
   const result = await model.generateContent(USER_PROMPT(text, hint));
   const out = result.response.text();

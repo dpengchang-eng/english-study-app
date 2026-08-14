@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildSentences, ensureTappableTokens, regexRetokenize } from "./align";
+import { buildSentences, ensureTappableTokens, regexRetokenize, sentencesFromGemini } from "./align";
 
 const dinner = "I went out for dinner with my family tonight.";
 
@@ -42,6 +42,17 @@ describe("ensureTappableTokens", () => {
       tokens: [{ id: "s0_t0", lemma: "", surface: "—", isWord: false }]
     });
     assert.ok(tokens.some((token) => token.surface === "dinner" && token.isWord));
+  });
+});
+
+describe("sentencesFromGemini", () => {
+  it("falls back to outputText when sentence rows have no text", () => {
+    const sentences = sentencesFromGemini({
+      outputText: "I'm gonna go work out and learn English.",
+      sentences: [{ tokens: [] }]
+    });
+    assert.equal(sentences.length, 1);
+    assert.equal(sentences[0]?.text, "I'm gonna go work out and learn English.");
   });
 });
 

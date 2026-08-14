@@ -3,19 +3,28 @@ import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
-import { getQuotaToday, type QuotaToday } from "../services/quota";
+import { countReadyToday, loadLocalSuccessCount, remainingAnon } from "../services/quota";
 import { colors, space } from "../theme";
 
+function Row({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.row}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value}>{value}</Text>
+    </View>
+  );
+}
+
 export function MeScreen() {
-  const { uid } = useAppState();
+  const { uid, recents } = useAppState();
   const { items, dueCount } = useWordbook();
-  const [quota, setQuota] = useState<QuotaToday | null>(null);
+  const [stored, setStored] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let live = true;
-      void getQuotaToday(uid).then((row) => {
-        if (live) setQuota(row);
+      void loadLocalSuccessCount(uid).then((count) => {
+        if (live) setStored(count);
       });
       return () => {
         live = false;
@@ -23,27 +32,34 @@ export function MeScreen() {
     }, [uid])
   );
 
+  const remaining = remainingAnon(Math.max(stored, countReadyToday(recents)));
+
   return (
     <View style={styles.page}>
-      <Text style={styles.title}>我的</Text>
-      <Text style={styles.body}>匿名使用</Text>
-      {quota ? (
-        <Text style={styles.body}>
-          今天还能转换 {quota.remaining} 次（每天 {quota.limit} 次，首尔时间）
-        </Text>
-      ) : (
-        <Text style={styles.muted}>正在读取今日额度…</Text>
-      )}
-      <Text style={styles.body}>词本 {items.length} 个</Text>
-      <Text style={styles.body}>待复习 {dueCount} 个</Text>
-      <Text style={styles.muted}>听句子用系统语音。Expo Go 里只能打字转换。</Text>
+      <Text style={styles.body}>未绑定</Text>
+      <Text style={styles.muted}>数据只在这台设备</Text>
+      <Row label="今日剩余转换" value={remaining} />
+      <Row label="词本数" value={items.length} />
+      <Row label="待复习数" value={dueCount} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, padding: space.md, gap: 10, backgroundColor: colors.bg },
-  title: { fontSize: 22, fontWeight: "800", color: colors.ink },
   body: { color: colors.ink, fontSize: 16, lineHeight: 24 },
-  muted: { color: colors.muted, fontSize: 14, lineHeight: 22 }
+  muted: { color: colors.muted, fontSize: 14, lineHeight: 22, marginBottom: 8 },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  label: { color: colors.ink, fontSize: 16 },
+  value: { color: colors.ink, fontSize: 16, fontWeight: "700" }
 });

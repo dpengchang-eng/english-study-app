@@ -1,7 +1,7 @@
 import "./appCheckDebug";
 import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { CustomProvider, initializeAppCheck } from "firebase/app-check";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAuth, initializeAuth, type Auth, type Persistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { appCheckDebugToken, installAppCheckDebugToken } from "./appCheckDebug";
@@ -18,44 +18,17 @@ const firebaseConfig = {
 
 export const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-function fallbackAppCheckToken(debugToken: string): { token: string; expireTimeMillis: number } {
-  return { token: debugToken, expireTimeMillis: Date.now() + 60 * 60 * 1000 };
-}
-
-/** Exchange the debug token. Never throw — a throw becomes App Check 403 and Gemini hangs. */
-async function debugAppCheckToken(debugToken: string): Promise<{ token: string; expireTimeMillis: number }> {
-  try {
-    const response = await fetch(
-      `https://firebaseappcheck.googleapis.com/v1/projects/${firebaseConfig.projectId}/apps/${firebaseConfig.appId}:exchangeDebugToken?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ debug_token: debugToken })
-      }
-    );
-    if (!response.ok) return fallbackAppCheckToken(debugToken);
-    const body = (await response.json()) as { token?: string; ttl?: string };
-    if (!body.token) return fallbackAppCheckToken(debugToken);
-    const seconds = Number(/^([\d.]+)s$/.exec(body.ttl ?? "")?.[1] ?? 3600);
-    return { token: body.token, expireTimeMillis: Date.now() + seconds * 1000 };
-  } catch {
-    return fallbackAppCheckToken(debugToken);
-  }
-}
-
 /**
- * AI Logic auto-enforces App Check. Expo / local uses the debug token.
- * CustomProvider.getToken must return { token, expireTimeMillis } — do not throw.
- * On web, FIREBASE_APPCHECK_DEBUG_TOKEN is installed before initializeAppCheck.
- * Production Play Integrity / App Attest is not required for this v1 PR.
+ * AI Logic auto-enforces App Check. In debug, set FIREBASE_APPCHECK_DEBUG_TOKEN
+ * on globalThis first, then initialize with ReCaptchaV3Provider (placeholder
+ * site key is enough). The SDK exchanges the debug token for a real JWT.
+ * Do not return the raw debug UUID from a CustomProvider.
  */
 function initAppCheck(): void {
-  const debugToken = installAppCheckDebugToken(appCheckDebugToken());
+  installAppCheckDebugToken(appCheckDebugToken());
   try {
     initializeAppCheck(firebaseApp, {
-      provider: new CustomProvider({
-        getToken: async () => debugAppCheckToken(debugToken)
-      }),
+      provider: new ReCaptchaV3Provider("debug-placeholder-site-key"),
       isTokenAutoRefreshEnabled: true
     });
   } catch {

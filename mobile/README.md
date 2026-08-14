@@ -49,10 +49,10 @@ Convert calls Gemini from the Expo app through **Firebase AI Logic**. It does **
 The app uses the existing Firebase web config / `apiKey` on project `english-study-app-c645a`:
 
 ```ts
-getAI(app, { backend: googleAIBackend() })
+getAI(app, { backend: new GoogleAIBackend() })
 ```
 
-That is the Gemini Developer API backend, not Vertex.
+That is the Gemini Developer API backend, not Vertex. One model: `gemini-2.0-flash`. The Firebase web `apiKey` must allow `generativelanguage.googleapis.com`.
 
 If convert fails locally, tap **没有 Gemini 时，加载示例**.
 
@@ -60,7 +60,7 @@ If convert fails locally, tap **没有 Gemini 时，加载示例**.
 
 AI Logic auto-enforces App Check. Local Expo / Expo Go / Expo web uses a **debug token**, not Play Integrity or App Attest. Do not block v1 on a production attestation setup.
 
-The web app already has a registered token named **didao expo web local**. The app uses it by default. `CustomProvider.getToken` returns `{ token, expireTimeMillis }` and never throws. On web, `FIREBASE_APPCHECK_DEBUG_TOKEN` is set before `initializeAppCheck`.
+The web app already has a registered token named **didao expo web local**. The app sets `globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN` **before** `initializeAppCheck`, then uses `ReCaptchaV3Provider` with a placeholder site key. The SDK exchanges that debug token for a real App Check JWT. Do not send the raw debug UUID as the App Check token.
 
 To use a different token:
 

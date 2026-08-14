@@ -1,6 +1,7 @@
 /**
- * Must load before initializeAppCheck. Expo web reads FIREBASE_APPCHECK_DEBUG_TOKEN
- * from `self` / `window`, which Firebase getGlobal() prefers over globalThis.
+ * Must run before initializeAppCheck. The JS SDK reads
+ * globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN and exchanges it for a real JWT.
+ * Do not pass this UUID to CustomProvider.getToken.
  */
 
 type AppCheckGlobal = {

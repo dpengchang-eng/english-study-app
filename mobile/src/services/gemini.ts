@@ -3,7 +3,7 @@ import { firebaseApp } from "../firebase";
 import type { ConvertErrorCode, SourceLang } from "../types";
 import { CONVERT_WAIT_MS } from "../types";
 
-export const GEMINI_MODEL = "gemini-3.6-flash";
+export const GEMINI_MODEL = "gemini-2.0-flash";
 
 const SYSTEM_PROMPT = `You rewrite the user's Chinese or English into authentic, natural American English.
 Keep the meaning. Prefer everyday spoken English: contractions, common idioms, and a natural rhythm.
@@ -29,9 +29,6 @@ export type GeminiPayload = {
 export type GeminiResult = { ok: true; payload: GeminiPayload } | { ok: false; errorCode: ConvertErrorCode };
 
 /** Gemini Developer API backend. Not Vertex / Agent Platform. */
-function googleAIBackend(): GoogleAIBackend {
-  return new GoogleAIBackend();
-}
 
 function parseJson(text: string): unknown {
   const trimmed = text
@@ -91,7 +88,7 @@ function mapThrown(error: unknown): ConvertErrorCode {
 /** Live convert uses Firebase AI Logic + the existing Firebase app. No Gemini API key. */
 export async function rewriteWithGemini(text: string, hint?: SourceLang): Promise<GeminiResult> {
   try {
-    const ai = getAI(firebaseApp, { backend: googleAIBackend() });
+    const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
     const model = getGenerativeModel(
       ai,
       {

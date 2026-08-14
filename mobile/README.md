@@ -15,7 +15,7 @@ v1.1 (not in this PR): tabs, listen, word tap, wordbook, cloze, review, bind Goo
 1. **Home** — text box, hold-to-record (release only fills the box), Convert, offline disables convert, last 20 local conversions.
 2. **Result** — original text + sentences as plain text. Waits 30 seconds (same as `convertText`). After 30s with no response: `gemini_timeout`. Unknown `errorCode`s use `parse_error`. Actions on success: copy all, convert again. No Play button. No tappable words. Home does not show remaining quota.
 
-Locked Result errors (branch on `errorCode` from payload or HttpsError details):
+Locked Result errors (read `errorCode` from the payload first; HttpsError details are fallback only):
 
 | errorCode | Copy | Action |
 | --- | --- | --- |

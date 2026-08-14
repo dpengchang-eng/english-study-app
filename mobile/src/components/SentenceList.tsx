@@ -1,11 +1,10 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import type { AudioStatus, Sentence, Token } from "../types";
+import type { Sentence, Token } from "../types";
 import { colors, space } from "../theme";
 
 export function SentenceList({
   sentences,
   loading,
-  audioById,
   selectedIds,
   onPlay,
   onTapToken,
@@ -13,7 +12,6 @@ export function SentenceList({
 }: {
   sentences: Sentence[];
   loading?: boolean;
-  audioById?: Record<string, AudioStatus>;
   selectedIds?: string[];
   onPlay?: (sentence: Sentence) => void;
   onTapToken?: (sentence: Sentence, token: Token) => void;
@@ -34,7 +32,6 @@ export function SentenceList({
   return (
     <View style={styles.list}>
       {sentences.map((sentence) => {
-        const status = audioById?.[sentence.id] ?? "ready";
         const tokens = sentence.tokens?.length ? sentence.tokens : null;
         return (
           <View key={sentence.id} style={styles.card}>
@@ -62,10 +59,8 @@ export function SentenceList({
                   )}
               </View>
               {onPlay ? (
-                <Pressable style={styles.play} onPress={() => onPlay(sentence)} disabled={status === "pending"}>
-                  <Text style={styles.playText}>
-                    {status === "pending" ? "…" : status === "unavailable" ? "无声" : "听"}
-                  </Text>
+                <Pressable style={styles.play} onPress={() => onPlay(sentence)}>
+                  <Text style={styles.playText}>听</Text>
                 </Pressable>
               ) : null}
             </View>

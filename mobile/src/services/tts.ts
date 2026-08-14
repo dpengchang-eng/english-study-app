@@ -1,23 +1,14 @@
 import * as Speech from "expo-speech";
-import type { AudioStatus } from "../types";
 
-export async function speakAmerican(text: string): Promise<AudioStatus> {
+/** Locked v1.1 listen: system American English. Ignore audioStatus / audioUrl. */
+export function speakAmerican(text: string): void {
   const trimmed = text.trim();
-  if (!trimmed) return "unavailable";
+  if (!trimmed) return;
   try {
     Speech.stop();
-    await new Promise<void>((resolve, reject) => {
-      Speech.speak(trimmed, {
-        language: "en-US",
-        rate: 0.95,
-        onDone: () => resolve(),
-        onStopped: () => resolve(),
-        onError: () => reject(new Error("speech"))
-      });
-    });
-    return "ready";
+    Speech.speak(trimmed, { language: "en-US" });
   } catch {
-    return "unavailable";
+    // Expo Go still launches if speech is missing
   }
 }
 

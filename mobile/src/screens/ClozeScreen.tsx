@@ -3,8 +3,20 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
-import { blankedText, clearPracticeAnswers, createPractice, type PracticeSession, submitPractice } from "../services/practice";
+import { blankParts, clearPracticeAnswers, createPractice, type PracticeSession, submitPractice } from "../services/practice";
 import { colors, space } from "../theme";
+import type { PracticeCard } from "../types";
+
+function ClozeSentence({ card }: { card: PracticeCard }) {
+  const { before, after } = blankParts(card);
+  return (
+    <View style={styles.sentenceWrap}>
+      <Text style={styles.sentence}>{before}</Text>
+      <View style={styles.blank} accessibilityLabel="blank" />
+      <Text style={styles.sentence}>{after}</Text>
+    </View>
+  );
+}
 
 export function ClozeScreen() {
   const navigation = useNavigation();
@@ -100,7 +112,7 @@ export function ClozeScreen() {
       <Text style={styles.kicker}>
         {index + 1}/{session.cards.length}
       </Text>
-      <Text style={styles.sentence}>{blankedText(card)}</Text>
+      <ClozeSentence card={card} />
       <TextInput
         value={draft}
         onChangeText={setDraft}
@@ -129,7 +141,15 @@ const styles = StyleSheet.create({
   page: { flex: 1, padding: space.lg, gap: 14, backgroundColor: colors.bg },
   title: { fontSize: 22, fontWeight: "800", color: colors.ink },
   kicker: { color: colors.muted },
+  sentenceWrap: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-end" },
   sentence: { fontSize: 22, lineHeight: 32, color: colors.ink, fontWeight: "600" },
+  blank: {
+    width: 96,
+    height: 2,
+    backgroundColor: colors.ink,
+    marginHorizontal: 6,
+    marginBottom: 8
+  },
   input: {
     borderWidth: 1,
     borderColor: colors.line,

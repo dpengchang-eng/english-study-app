@@ -116,12 +116,20 @@ export async function submitPractice(
   return { result: { correct, expected, dueAt: next.dueAt, box: next.box }, items: nextItems };
 }
 
-export function blankedText(card: PracticeCard): string {
+/** Same-width blank every time so the gap does not leak the answer length. */
+export const FIXED_BLANK = "________";
+
+export function blankParts(card: PracticeCard): { before: string; after: string } {
   const { sentenceText, blankSpan } = card;
   if (blankSpan.end > blankSpan.start && blankSpan.end <= sentenceText.length) {
-    return `${sentenceText.slice(0, blankSpan.start)}____${sentenceText.slice(blankSpan.end)}`;
+    return { before: sentenceText.slice(0, blankSpan.start), after: sentenceText.slice(blankSpan.end) };
   }
-  return sentenceText;
+  return { before: sentenceText, after: "" };
+}
+
+export function blankedText(card: PracticeCard): string {
+  const { before, after } = blankParts(card);
+  return `${before}${FIXED_BLANK}${after}`;
 }
 
 export function clearPracticeAnswers(): void {

@@ -30,13 +30,15 @@ export async function lookupPhrase(phrase: string, lemma: string): Promise<Looku
   if (cached) return cached;
   const local = fromLocal(key) ?? fromLocal(phrase);
   if (local) {
-    memory.set(key, local);
-    return local;
+    const clipped = { ipa: local.ipa, senses: local.senses.slice(0, 3) };
+    memory.set(key, clipped);
+    return clipped;
   }
   const remote = await rewriteLookup(phrase || lemma);
   if (remote) {
-    memory.set(key, remote);
-    return remote;
+    const clipped = { ipa: remote.ipa, senses: remote.senses.slice(0, 3) };
+    memory.set(key, clipped);
+    return clipped;
   }
   const fallback: LookupResult = { ipa: "", senses: ["暂无中文释义"] };
   memory.set(key, fallback);

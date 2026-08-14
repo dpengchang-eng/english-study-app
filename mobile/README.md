@@ -39,13 +39,13 @@ Unchanged from v1: `gemini-flash-lite-latest`, REST key if set, else Firebase AI
 
 ## Listen
 
-Each sentence card has **听**. `audioStatus` is local UI only: `ready` / `pending` / `unavailable`.
+Each sentence card has **听**. Call `Speech.speak(sentence.text, { language: "en-US" })`. Ignore `audioStatus` / `audioUrl`. Stop speaking when leaving the screen. Do not add `expo-speech-recognition`.
 
 ## Word tap / phrase
 
-Tap a word to open the lookup half-sheet (phonetic + up to 3 Chinese senses). Long-press, then tap another word in the same sentence to select up to 6 consecutive words and save a phrase.
+Tap an `isWord` token to open the lookup half-sheet (phonetic + up to 3 Chinese senses). Long-press, then tap another word in the same sentence to select up to 6 consecutive words and save a phrase.
 
-`saveToWordbook` writes `users/{uid}/wordbook/{slug(lemma)}` on the client. Only `isWord` tokens, 1–6 consecutive `tokenIds`. If the item already exists, `dueAt` / `box` are not reset.
+`saveToWordbook` writes `users/{uid}/wordbook/{slug(lemma)}` on the client. Only `isWord` tokens, 1–6 consecutive `tokenIds`. If the item already exists, show **已在词本** and do not reset `dueAt` / `box`.
 
 Firestore: signed-in owner can read/write `wordbook` and `practiceSessions` (`isOwner` only).
 
@@ -55,9 +55,13 @@ Only saved wordbook items. Review query is `dueAt <= now`, `orderBy dueAt`. **�
 
 `createPractice` writes UI cards `{wordbookItemId, sentenceText, blankSpan, hintGloss}` only. No `answer` / `answerNorm` in the UI payload. Answers stay in memory (or a session doc the UI does not use as the question source).
 
-`submitPractice` is the only correctness source. It returns `{correct, expected, dueAt, box}`. First wrong shows `hintGloss`. Two wrongs reveal `result.expected`.
+`submitPractice` is the only correctness source. Grade from `correct` / `expected`. The blank is fixed-width (does not match the answer length). `hintGloss` shows only after the first wrong. Two wrongs reveal `result.expected`.
 
 SRS: Again → box 0, due in 60s. Good → 1 day, then 3 days, then 7 days.
+
+## 我的
+
+Placeholder this cut. No Google / Apple bind.
 
 ## Gemini
 

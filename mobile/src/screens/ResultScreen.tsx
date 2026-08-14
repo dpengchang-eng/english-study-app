@@ -12,7 +12,7 @@ import { openLookup } from "../navigation/rootNav";
 import type { ConvertStackParamList } from "../navigation/types";
 import { speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
-import { CONVERT_WAIT_MS, type AudioStatus, type Sentence, type Token } from "../types";
+import { CONVERT_WAIT_MS, type Sentence, type Token } from "../types";
 
 function consecutiveWords(tokens: Token[], a: Token, b: Token): Token[] | null {
   const words = tokens.filter((token) => token.isWord);
@@ -32,7 +32,6 @@ export function ResultScreen() {
   const { getConversion, convertAgain, failIfLoading } = useAppState();
   const conversion = getConversion(conversionId);
   const [copied, setCopied] = useState(false);
-  const [audioById, setAudioById] = useState<Record<string, AudioStatus>>({});
   const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
 
@@ -68,10 +67,8 @@ export function ResultScreen() {
     setCopied(true);
   };
 
-  const play = async (sentence: Sentence): Promise<void> => {
-    setAudioById((prev) => ({ ...prev, [sentence.id]: "pending" }));
-    const status = await speakAmerican(sentence.text);
-    setAudioById((prev) => ({ ...prev, [sentence.id]: status }));
+  const play = (sentence: Sentence): void => {
+    speakAmerican(sentence.text);
   };
 
   const openTokens = (sentence: Sentence, tokens: Token[]): void => {
@@ -114,9 +111,8 @@ export function ResultScreen() {
       {conversion.status === "ready" ? (
         <SentenceList
           sentences={conversion.sentences}
-          audioById={audioById}
           selectedIds={picked?.tokens.map((token) => token.id)}
-          onPlay={(sentence) => void play(sentence)}
+          onPlay={play}
           onTapToken={onTapToken}
           onLongPressToken={onLongPressToken}
         />

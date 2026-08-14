@@ -5,26 +5,31 @@ import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
 import { lookupPhrase } from "../services/lookup";
 import { phraseFromTokens } from "../services/wordbook";
-import { speakAmerican } from "../services/tts";
+import { speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
 
 export function LookupScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, "Lookup">>();
   const { tokens, sentenceTokens, sentenceText, conversionId } = route.params;
-  const { savePhrase } = useWordbook();
+  const { items, savePhrase } = useWordbook();
   const { phrase, lemmaKey } = phraseFromTokens(tokens);
+  const alreadySaved = items.some((item) => item.id === lemmaKey);
   const [ipa, setIpa] = useState("");
   const [senses, setSenses] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(alreadySaved ? "已在词本" : null);
+
+  useEffect(() => {
+    return () => stopSpeaking();
+  }, []);
 
   useEffect(() => {
     let live = true;
     void lookupPhrase(phrase, lemmaKey).then((result) => {
       if (!live) return;
       setIpa(result.ipa);
-      setSenses(result.senses);
+      setSenses(result.senses.slice(0, 3));
       setLoading(false);
     });
     return () => {
@@ -40,9 +45,9 @@ export function LookupScreen() {
         sentenceText,
         conversionId,
         ipa,
-        senses
+        senses: senses.slice(0, 3)
       });
-      setSaved(result.created ? "已加入词本" : "词本里已有，复习进度没变");
+      setSaved(result.created ? "已加入词本" : "已在词本");
     } catch {
       setSaved("只能存 1 到 6 个连续单词");
     }
@@ -54,14 +59,14 @@ export function LookupScreen() {
       {loading ? <ActivityIndicator color={colors.accent} /> : null}
       {!loading && ipa ? <Text style={styles.ipa}>{ipa}</Text> : null}
       {!loading
-        ? senses.map((sense) => (
+        ? senses.slice(0, 3).map((sense) => (
             <Text key={sense} style={styles.sense}>
               {sense}
             </Text>
           ))
         : null}
       <View style={styles.row}>
-        <Pressable style={styles.ghost} onPress={() => void speakAmerican(phrase)}>
+        <Pressable style={styles.ghost} onPress={() => speakAmerican(phrase)}>
           <Text style={styles.ghostText}>听</Text>
         </Pressable>
         <Pressable style={styles.btn} onPress={() => void save()}>

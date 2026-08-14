@@ -26,10 +26,33 @@ export function mapConvertOutput(
   output: ConvertCallOutput,
   base: Pick<Conversion, "id" | "clientRequestId" | "sourceType" | "sourceText" | "createdAt">
 ): Conversion {
-  const sentences = (output.sentences ?? []).map((sentence, index) => ({
-    id: sentence.id || `s${index}`,
-    text: String(sentence.text ?? "")
-  }));
+  const sentences = (output.sentences ?? []).map((sentence, index) => {
+    const tokens = Array.isArray(sentence.tokens)
+      ? sentence.tokens.flatMap((raw, tokenIndex) => {
+          if (!raw || typeof raw !== "object") return [];
+          const token = raw as Record<string, unknown>;
+          const id = typeof token.id === "string" && token.id ? token.id : `s${index}_t${tokenIndex}`;
+          const lemma = typeof token.lemma === "string" ? token.lemma : "";
+          const surface = typeof token.surface === "string" ? token.surface : "";
+          if (!id || (!lemma && !surface)) return [];
+          return [
+            {
+              id,
+              lemma: lemma || surface.toLowerCase(),
+              surface: surface || lemma,
+              isWord: Boolean(token.isWord),
+              charStart: typeof token.charStart === "number" ? token.charStart : undefined,
+              charEnd: typeof token.charEnd === "number" ? token.charEnd : undefined
+            }
+          ];
+        })
+      : undefined;
+    return {
+      id: sentence.id || `s${index}`,
+      text: String(sentence.text ?? ""),
+      tokens
+    };
+  });
   return {
     ...base,
     sourceLang: output.sourceLang ?? "unknown",

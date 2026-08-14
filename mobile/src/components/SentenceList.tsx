@@ -1,13 +1,23 @@
-import { StyleSheet, Text, View } from "react-native";
-import type { Sentence } from "../types";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import type { AudioStatus, Sentence, Token } from "../types";
 import { colors, space } from "../theme";
 
 export function SentenceList({
   sentences,
-  loading
+  loading,
+  audioById,
+  selectedIds,
+  onPlay,
+  onTapToken,
+  onLongPressToken
 }: {
   sentences: Sentence[];
   loading?: boolean;
+  audioById?: Record<string, AudioStatus>;
+  selectedIds?: string[];
+  onPlay?: (sentence: Sentence) => void;
+  onTapToken?: (sentence: Sentence, token: Token) => void;
+  onLongPressToken?: (sentence: Sentence, token: Token) => void;
 }) {
   if (loading) {
     return (
@@ -19,20 +29,76 @@ export function SentenceList({
     );
   }
 
+  const selected = new Set(selectedIds ?? []);
+
   return (
     <View style={styles.list}>
-      {sentences.map((sentence) => (
-        <Text key={sentence.id} style={styles.sentence}>
-          {sentence.text}
-        </Text>
-      ))}
+      {sentences.map((sentence) => {
+        const status = audioById?.[sentence.id] ?? "ready";
+        const tokens = sentence.tokens?.length ? sentence.tokens : null;
+        return (
+          <View key={sentence.id} style={styles.card}>
+            <View style={styles.row}>
+              <View style={styles.words}>
+                {tokens
+                  ? tokens.map((token) =>
+                      token.isWord ? (
+                        <Pressable
+                          key={token.id}
+                          onPress={() => onTapToken?.(sentence, token)}
+                          onLongPress={() => onLongPressToken?.(sentence, token)}
+                          style={[styles.word, selected.has(token.id) && styles.wordOn]}
+                        >
+                          <Text style={styles.wordText}>{token.surface}</Text>
+                        </Pressable>
+                      ) : (
+                        <Text key={token.id} style={styles.punct}>
+                          {token.surface}
+                        </Text>
+                      )
+                    )
+                  : (
+                    <Text style={styles.plain}>{sentence.text}</Text>
+                  )}
+              </View>
+              {onPlay ? (
+                <Pressable style={styles.play} onPress={() => onPlay(sentence)} disabled={status === "pending"}>
+                  <Text style={styles.playText}>
+                    {status === "pending" ? "…" : status === "unavailable" ? "无声" : "听"}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   list: { gap: space.sm },
-  sentence: { color: colors.ink, fontSize: 18, lineHeight: 28 },
+  card: {
+    backgroundColor: colors.card,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12
+  },
+  row: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  words: { flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
+  word: { paddingHorizontal: 2, paddingVertical: 2, borderRadius: 6 },
+  wordOn: { backgroundColor: colors.chipOn },
+  wordText: { color: colors.ink, fontSize: 18, lineHeight: 28 },
+  punct: { color: colors.ink, fontSize: 18, lineHeight: 28 },
+  plain: { color: colors.ink, fontSize: 18, lineHeight: 28 },
+  play: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  playText: { color: colors.ink, fontWeight: "700", fontSize: 13 },
   bone: { height: 16, borderRadius: 8, backgroundColor: colors.line },
   boneWide: { width: "100%" },
   boneMid: { width: "82%" },

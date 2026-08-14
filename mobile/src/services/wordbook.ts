@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, doc, getDocs, query, setDoc, Timestamp, where, orderBy } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, query, setDoc, Timestamp, where, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
 import type { SrsBox, Token, WordbookItem } from "../types";
 import { slugLemma } from "./slug";
@@ -198,6 +198,17 @@ export async function saveToWordbook(
     await writeLocal(uid, failed);
     return { items: failed, created: true, item };
   }
+}
+
+export async function deleteFromWordbook(uid: string, items: WordbookItem[], id: string): Promise<WordbookItem[]> {
+  const list = items.filter((item) => item.id !== id);
+  await writeLocal(uid, list);
+  try {
+    await deleteDoc(doc(db, "users", uid, "wordbook", id));
+  } catch {
+    // local delete still applies if Firestore is missing this row
+  }
+  return list;
 }
 
 export async function updateWordbookSrs(uid: string, items: WordbookItem[], next: WordbookItem): Promise<WordbookItem[]> {

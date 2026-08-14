@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Token, WordbookItem } from "../types";
-import { dueNowCount, loadWordbook, saveToWordbook } from "../services/wordbook";
+import { deleteFromWordbook, dueNowCount, loadWordbook, saveToWordbook } from "../services/wordbook";
 
 type SavePhraseInput = {
   tokens: Token[];
@@ -15,6 +15,7 @@ type WordbookValue = {
   items: WordbookItem[];
   dueCount: number;
   savePhrase: (input: SavePhraseInput) => Promise<{ created: boolean; item: WordbookItem }>;
+  deletePhrase: (id: string) => Promise<void>;
   syncItems: (next: WordbookItem[]) => void;
 };
 
@@ -36,6 +37,14 @@ export function WordbookProvider({ uid, children }: { uid: string; children: Rea
     [items, uid]
   );
 
+  const deletePhrase = useCallback(
+    async (id: string) => {
+      const next = await deleteFromWordbook(uid, items, id);
+      setItems(next);
+    },
+    [items, uid]
+  );
+
   const syncItems = useCallback((next: WordbookItem[]) => {
     setItems(next);
   }, []);
@@ -45,9 +54,10 @@ export function WordbookProvider({ uid, children }: { uid: string; children: Rea
       items,
       dueCount: dueNowCount(items),
       savePhrase,
+      deletePhrase,
       syncItems
     }),
-    [items, savePhrase, syncItems]
+    [deletePhrase, items, savePhrase, syncItems]
   );
 
   return <WordbookContext.Provider value={value}>{children}</WordbookContext.Provider>;

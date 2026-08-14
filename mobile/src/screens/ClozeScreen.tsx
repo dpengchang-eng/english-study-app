@@ -7,8 +7,8 @@ import { blankParts, clearPracticeAnswers, createPractice, type PracticeSession,
 import { colors, space } from "../theme";
 import type { PracticeCard } from "../types";
 
-function ClozeSentence({ card }: { card: PracticeCard }) {
-  const { before, after } = blankParts(card);
+function ClozeSentence({ card, phrase }: { card: PracticeCard; phrase?: string }) {
+  const { before, after } = blankParts(card, phrase);
   return (
     <View style={styles.sentenceWrap}>
       <Text style={styles.sentence}>{before}</Text>
@@ -34,9 +34,13 @@ export function ClozeScreen() {
 
   useEffect(() => {
     let live = true;
-    void createPractice(uid, itemsRef.current).then((next) => {
-      if (live) setSession(next);
-    });
+    void createPractice(uid, itemsRef.current)
+      .then((next) => {
+        if (live) setSession(next);
+      })
+      .catch(() => {
+        if (live) setSession({ sessionId: "local", cards: [] });
+      });
     return () => {
       live = false;
       clearPracticeAnswers();
@@ -97,6 +101,7 @@ export function ClozeScreen() {
     return (
       <View style={styles.page}>
         <Text style={styles.title}>现在没有待复习的填空。</Text>
+        <Text style={styles.kicker}>先存几个词，到期了再来填空。</Text>
         <Pressable style={styles.btn} onPress={finish}>
           <Text style={styles.btnText}>返回</Text>
         </Pressable>
@@ -112,7 +117,7 @@ export function ClozeScreen() {
       <Text style={styles.kicker}>
         {index + 1}/{session.cards.length}
       </Text>
-      <ClozeSentence card={card} />
+      <ClozeSentence card={card} phrase={items.find((item) => item.id === card.wordbookItemId)?.phrase} />
       <TextInput
         value={draft}
         onChangeText={setDraft}

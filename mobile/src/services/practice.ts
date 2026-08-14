@@ -1,7 +1,10 @@
 import { addDoc, collection, Timestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import type { PracticeCard, SrsBox, SubmitPracticeResult, WordbookItem } from "../types";
+import { resolveBlankSpan } from "./blank";
 import { queryDueWordbook, updateWordbookSrs } from "./wordbook";
+
+export { blankedText, blankParts, FIXED_BLANK, resolveBlankSpan } from "./blank";
 
 export type PracticeSession = {
   sessionId: string;
@@ -64,8 +67,7 @@ export async function createPractice(uid: string, items: WordbookItem[]): Promis
   const due = await queryDueWordbook(uid);
   const source = due.length ? due : items.filter((item) => item.dueAt <= Date.now()).sort((a, b) => a.dueAt - b.dueAt);
   const cards: PracticeCard[] = source.map((item) => {
-    const start = Math.max(0, Math.min(item.blankStart, item.sentenceContext.length));
-    const end = Math.max(start, Math.min(item.blankEnd, item.sentenceContext.length));
+    const span = resolveBlankSpan(item.sentenceContext, item.phrase, item.blankStart, item.blankEnd);
     memory.set(item.id, {
       expected: item.phrase,
       accepted: [item.phrase, item.id.replace(/-/g, " "), ...item.phrase.split(/\s+/)].map(normalize).filter(Boolean),
@@ -74,7 +76,7 @@ export async function createPractice(uid: string, items: WordbookItem[]): Promis
     return {
       wordbookItemId: item.id,
       sentenceText: item.sentenceContext,
-      blankSpan: { start, end },
+      blankSpan: span,
       hintGloss: item.senses[0] ?? ""
     };
   });
@@ -114,22 +116,6 @@ export async function submitPractice(
   const nextItems = await updateWordbookSrs(uid, items, next);
   memory.set(wordbookItemId, { expected, accepted: row?.accepted ?? [normalize(expected)], item: next });
   return { result: { correct, expected, dueAt: next.dueAt, box: next.box }, items: nextItems };
-}
-
-/** Same-width blank every time so the gap does not leak the answer length. */
-export const FIXED_BLANK = "________";
-
-export function blankParts(card: PracticeCard): { before: string; after: string } {
-  const { sentenceText, blankSpan } = card;
-  if (blankSpan.end > blankSpan.start && blankSpan.end <= sentenceText.length) {
-    return { before: sentenceText.slice(0, blankSpan.start), after: sentenceText.slice(blankSpan.end) };
-  }
-  return { before: sentenceText, after: "" };
-}
-
-export function blankedText(card: PracticeCard): string {
-  const { before, after } = blankParts(card);
-  return `${before}${FIXED_BLANK}${after}`;
 }
 
 export function clearPracticeAnswers(): void {

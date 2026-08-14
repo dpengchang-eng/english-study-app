@@ -54,6 +54,23 @@ async function currentQuota(uid: string, now = new Date()): Promise<QuotaState> 
   };
 }
 
+export type QuotaToday = {
+  convertCountToday: number;
+  remaining: number;
+  limit: number;
+  convertDayKey: string;
+};
+
+export async function getQuotaToday(uid: string): Promise<QuotaToday> {
+  const state = await currentQuota(uid);
+  return {
+    convertCountToday: state.convertCountToday,
+    remaining: Math.max(0, ANON_DAILY_QUOTA - state.convertCountToday),
+    limit: ANON_DAILY_QUOTA,
+    convertDayKey: state.convertDayKey
+  };
+}
+
 export async function checkQuota(uid: string): Promise<"ok" | "quota_exceeded"> {
   const state = await currentQuota(uid);
   return state.convertCountToday >= ANON_DAILY_QUOTA ? "quota_exceeded" : "ok";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { dailyLimit, remainingToday, seoulDayKey } from "./quotaLimits";
+import { dailyLimit, mergeQuotaCounts, remainingToday, seoulDayKey } from "./quotaLimits";
 
 describe("quotaLimits", () => {
   it("uses 20 for anonymous and 80 after Google link", () => {
@@ -15,5 +15,11 @@ describe("quotaLimits", () => {
   it("uses the Asia/Seoul calendar day", () => {
     assert.equal(seoulDayKey(new Date("2026-08-14T01:00:00+09:00")), "2026-08-14");
     assert.equal(seoulDayKey(new Date("2026-08-13T16:00:00Z")), "2026-08-14");
+  });
+
+  it("keeps the higher of local and remote after storage is cleared", () => {
+    assert.equal(mergeQuotaCounts(0, 20), 20);
+    assert.equal(mergeQuotaCounts(7, 3), 7);
+    assert.equal(remainingToday(mergeQuotaCounts(0, 20), false), 0);
   });
 });

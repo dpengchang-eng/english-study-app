@@ -126,8 +126,7 @@ async function callAiLogic(text: string, hint?: SourceLang): Promise<GeminiResul
       systemInstruction: SYSTEM_PROMPT,
       generationConfig: {
         temperature: 0.3,
-        responseMimeType: "application/json",
-        responseSchema: RESPONSE_SCHEMA
+        responseMimeType: "application/json"
       }
     },
     { timeout: GEMINI_HARD_MS }

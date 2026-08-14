@@ -47,17 +47,16 @@ function readSentenceText(row: unknown): string {
 
 function normalizeSentences(raw: unknown, fallbackText: string): GeminiPayload["sentences"] {
   const rows = Array.isArray(raw) ? raw : [];
-  const mapped = rows
-    .map((row) => {
-      const text = readSentenceText(row);
-      if (!text) return null;
-      const tokens =
-        row && typeof row === "object" && Array.isArray((row as { tokens?: unknown }).tokens)
-          ? (row as { tokens: unknown[] }).tokens
-          : undefined;
-      return { text, tokens };
-    })
-    .filter((row): row is { text: string; tokens?: unknown[] } => row !== null);
+  const mapped: GeminiPayload["sentences"] = [];
+  for (const row of rows) {
+    const text = readSentenceText(row);
+    if (!text) continue;
+    const tokens =
+      row && typeof row === "object" && Array.isArray((row as { tokens?: unknown }).tokens)
+        ? (row as { tokens: unknown[] }).tokens
+        : undefined;
+    mapped.push({ text, tokens });
+  }
   if (mapped.length > 0) return mapped;
   return fallbackText ? [{ text: fallbackText }] : [];
 }

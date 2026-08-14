@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "mobile": "npm --prefix mobile start",
     "mobile:typecheck": "npm --prefix mobile run typecheck",
+    "mobile:test": "npm --prefix mobile test",
     "functions:test": "npm --prefix functions test",
     "functions:typecheck": "npm --prefix functions run typecheck"
   },

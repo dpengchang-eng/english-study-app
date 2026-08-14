@@ -27,6 +27,10 @@ service cloud.firestore {
     //   users/{uid}/practiceSessions/{id} — owner read/write
     //   users/{uid}/settings/didao
     //
+    // Google bind (Expo Go) uses linkWithCredential on the anonymous uid.
+    // Same uid keeps wordbook / practiceSessions / conversions. Do not
+    // tighten conversions. Storage stays closed. No Cloud Functions.
+    //
     // ===============================================================
 
     function isAuthenticated() {

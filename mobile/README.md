@@ -23,7 +23,7 @@ npm install
 cp .env.example .env
 ```
 
-Put the project's dedicated **Gemini Developer API key** in `mobile/.env` as `EXPO_PUBLIC_GEMINI_API_KEY`. Never commit `.env`.
+Put the project's dedicated **Gemini Developer API key** in `mobile/.env` as `EXPO_PUBLIC_GEMINI_API_KEY`. For 绑定 Google, also set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (Firebase Web client ID). Never commit `.env`.
 
 ```bash
 npx expo start -c
@@ -35,7 +35,7 @@ Expo Go does not include `expo-speech-recognition`. The mic is hidden. Typing co
 
 ## Convert
 
-Unchanged from v1: `gemini-flash-lite-latest`, REST key if set, else Firebase AI Logic. UI cap 500. Locked `errorCode`s. 30s timeout. 20/day on-device quota (Asia/Seoul).
+Unchanged from v1: `gemini-flash-lite-latest`, REST key if set, else Firebase AI Logic. UI cap 500. Locked `errorCode`s. 30s timeout. Quota is on-device (Asia/Seoul): **20/day** while anonymous, **80/day** after a successful Google link. Remaining shows only on 我的.
 
 ## Listen
 
@@ -61,7 +61,24 @@ SRS: Again → box 0, due in 60s. Good → 1 day, then 3 days, then 7 days.
 
 ## 我的
 
-Placeholder this cut. No Google / Apple bind.
+Unbound: **未绑定**, **数据只在这台设备**, three read-only rows (今日剩余转换 / 词本数 / 待复习数), plus **绑定 Google**.
+
+Bound: Google email and **数据在云端**. Same three rows. No login wall. No Apple this cut.
+
+Binding uses `linkWithCredential` (Expo Go / `expo-auth-session`) or `linkWithPopup` (web) on the **current anonymous user**. It must not `signIn` a new uid (that would hide the wordbook). If that Google account already belongs to another Firebase user, show a Chinese error and stay on the current uid.
+
+## Google bind (Expo Go)
+
+Do **not** add `@react-native-google-signin/google-signin` or `expo-speech-recognition`. Those native modules crash or fail in Expo Go.
+
+1. Firebase Console → Authentication → Sign-in method → enable **Google**.
+2. Copy the **Web client ID** into `mobile/.env` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`.
+3. Google Cloud Console → that Web client → Authorized redirect URIs, add:
+   - `http://localhost:8081/oauthredirect`
+   - `http://127.0.0.1:8081/oauthredirect`
+4. Restart with `npx expo start -c`.
+
+On launch and after bind, the app loads `users/{uid}/wordbook` and merges it with local data. Local pending/error rows are kept. A failed cloud write shows **未同步到云** and does not block convert or save.
 
 ## Gemini
 

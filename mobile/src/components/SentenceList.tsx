@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ensureTappableTokens } from "../services/align";
 import type { Sentence, Token } from "../types";
 import { colors, space } from "../theme";
 
@@ -32,18 +33,20 @@ export function SentenceList({
   return (
     <View style={styles.list}>
       {sentences.map((sentence) => {
-        const tokens = sentence.tokens?.length ? sentence.tokens : null;
+        const tokens = ensureTappableTokens(sentence);
+        const hasWords = tokens.some((token) => token.isWord);
+        const tappable = { ...sentence, tokens };
         return (
           <View key={sentence.id} style={styles.card}>
             <View style={styles.row}>
               <View style={styles.words}>
-                {tokens
+                {hasWords
                   ? tokens.map((token) =>
                       token.isWord ? (
                         <Pressable
                           key={token.id}
-                          onPress={() => onTapToken?.(sentence, token)}
-                          onLongPress={() => onLongPressToken?.(sentence, token)}
+                          onPress={() => onTapToken?.(tappable, token)}
+                          onLongPress={() => onLongPressToken?.(tappable, token)}
                           style={[styles.word, selected.has(token.id) && styles.wordOn]}
                         >
                           <Text style={styles.wordText}>{token.surface}</Text>

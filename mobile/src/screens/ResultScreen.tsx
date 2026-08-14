@@ -10,6 +10,7 @@ import { useAppState } from "../context/AppState";
 import { auth } from "../firebase";
 import { openLookup } from "../navigation/rootNav";
 import type { ConvertStackParamList } from "../navigation/types";
+import { ensureTappableTokens } from "../services/align";
 import { speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
 import { CONVERT_WAIT_MS, type Sentence, type Token } from "../types";
@@ -31,6 +32,10 @@ export function ResultScreen() {
   const { conversionId } = route.params;
   const { getConversion, convertAgain, failIfLoading } = useAppState();
   const conversion = getConversion(conversionId);
+  const sentences = (conversion?.sentences ?? []).map((sentence) => ({
+    ...sentence,
+    tokens: ensureTappableTokens(sentence)
+  }));
   const [copied, setCopied] = useState(false);
   const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
@@ -61,7 +66,7 @@ export function ResultScreen() {
 
   const copyAll = async (): Promise<void> => {
     const text =
-      conversion.sentences.map((sentence) => sentence.text).filter(Boolean).join("\n") || conversion.outputText || "";
+      sentences.map((sentence) => sentence.text).filter(Boolean).join("\n") || conversion.outputText || "";
     if (!text) return;
     await Clipboard.setStringAsync(text);
     setCopied(true);
@@ -110,7 +115,7 @@ export function ResultScreen() {
       ) : null}
       {conversion.status === "ready" ? (
         <SentenceList
-          sentences={conversion.sentences}
+          sentences={sentences}
           selectedIds={picked?.tokens.map((token) => token.id)}
           onPlay={play}
           onTapToken={onTapToken}

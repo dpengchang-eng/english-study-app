@@ -10,7 +10,7 @@ import { LookupScreen } from "../screens/LookupScreen";
 import { ClozeScreen } from "../screens/ClozeScreen";
 import { useWordbook } from "../context/WordbookState";
 import { colors } from "../theme";
-import { rootNav } from "./rootNav";
+import { flushRootNav, rootNav } from "./rootNav";
 import type { ConvertStackParamList, RootStackParamList, TabParamList } from "./types";
 
 const ConvertStack = createNativeStackNavigator<ConvertStackParamList>();
@@ -70,7 +70,7 @@ function TabNavigator() {
 
 export function RootNavigator() {
   return (
-    <NavigationContainer ref={rootNav} theme={theme}>
+    <NavigationContainer ref={rootNav} theme={theme} onReady={flushRootNav}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         <RootStack.Screen name="Tabs" component={TabNavigator} />
         <RootStack.Screen

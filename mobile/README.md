@@ -74,9 +74,7 @@ Do **not** add `@react-native-google-signin/google-signin` or `expo-speech-recog
 
 1. Firebase Console → Authentication → Sign-in method → enable **Google**.
 2. Copy the **Web client ID** into `mobile/.env` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`.
-3. Google Cloud Console → that Web client → Authorized redirect URIs, add:
-   - `http://localhost:8081/oauthredirect`
-   - `http://127.0.0.1:8081/oauthredirect`
+3. Expo Go returns to the current experience URL (`exp://<metro-host>/--/oauthredirect`). Do not use `didao://`, and do not force the computer's localhost — a phone cannot open those.
 4. Restart with `npx expo start -c`.
 
 On launch and after bind, the app loads `users/{uid}/wordbook` and merges it with local data. Local pending/error rows are kept. A failed cloud write shows **未同步到云** and does not block convert or save.
@@ -94,7 +92,7 @@ One model: `gemini-flash-lite-latest`.
 npx -y firebase-tools@latest deploy --only firestore:rules --project english-study-app-c645a
 ```
 
-Locked rules: owner read/write on `users/{uid}` plus `conversions`, `wordbook`, and `practiceSessions`. `dictCache` closed. Quota is on-device (20/80). Do not add extra validation in `firestore.rules`.
+Locked rules: owner read/write on `users/{uid}` plus `conversions`, `wordbook`, and `practiceSessions`. Web flashcard `words` and `users/{uid}/progress` stay readable/writable as before. `dictCache` closed. Quota is on-device (20/80). Do not add extra validation in `firestore.rules`.
 
 ## Typecheck
 

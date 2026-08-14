@@ -1,5 +1,5 @@
-import { CONVERT_WAIT_MS, ERROR_COPY, SERVER_TEXT_MAX, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
-import { buildSentences, ensureTappableTokens, isWordish } from "./align";
+import { ERROR_COPY, SERVER_TEXT_MAX, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
+import { ensureTappableTokens, isWordish, sentencesFromGemini } from "./align";
 import { resolveErrorCode } from "./convertError";
 import { rewriteWithGemini } from "./gemini";
 import { persistConversion } from "./persist";
@@ -93,18 +93,6 @@ function clean(input: ConvertCallInput): ConvertCallOutput | ConvertCallInput {
   return { ...input, text, clientRequestId };
 }
 
-async function withWait(work: Promise<ConvertCallOutput>): Promise<ConvertCallOutput> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<ConvertCallOutput>((resolve) => {
-    timer = setTimeout(() => resolve(failed("gemini_timeout")), CONVERT_WAIT_MS);
-  });
-  try {
-    return await Promise.race([work, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 async function runOnDevice(input: ConvertCallInput): Promise<ConvertCallOutput> {
   const quota = await checkQuota(input.uid);
   if (quota === "quota_exceeded") return failed("quota_exceeded");
@@ -117,25 +105,23 @@ async function runOnDevice(input: ConvertCallInput): Promise<ConvertCallOutput> 
   }
   if (!gemini.ok) return failed(gemini.errorCode);
 
-  const sentences = buildSentences(gemini.payload.sentences);
+  const sentences = sentencesFromGemini(gemini.payload);
   if (sentences.length === 0) return failed("parse_error");
 
-  await incrementQuota(input.uid);
-
-  const conversionId =
-    (await persistConversion(input.uid, {
-      clientRequestId: input.clientRequestId,
-      sourceType: input.sourceType,
-      sourceLang: gemini.payload.sourceLang,
-      sourceText: input.text,
-      outputText: gemini.payload.outputText,
-      sentences,
-      status: "ready",
-      errorCode: null
-    })) ?? "";
+  void incrementQuota(input.uid);
+  void persistConversion(input.uid, {
+    clientRequestId: input.clientRequestId,
+    sourceType: input.sourceType,
+    sourceLang: gemini.payload.sourceLang,
+    sourceText: input.text,
+    outputText: gemini.payload.outputText,
+    sentences,
+    status: "ready",
+    errorCode: null
+  });
 
   return {
-    conversionId,
+    conversionId: "",
     status: "ready",
     sourceLang: gemini.payload.sourceLang,
     outputText: gemini.payload.outputText,
@@ -156,18 +142,17 @@ async function persistFailure(input: ConvertCallInput, errorCode: ConvertErrorCo
   });
 }
 
-/** On-device convert via Firebase AI Logic. Does not call a Cloud Function. */
+/** On-device convert via Gemini REST or Firebase AI Logic. Does not call a Cloud Function. */
 export async function convertText(input: ConvertCallInput): Promise<ConvertCallOutput> {
   const cleaned = clean(input);
   if ("errorCode" in cleaned && cleaned.status === "failed") {
-    const id = await persistFailure(input, cleaned.errorCode ?? "parse_error");
-    return { ...cleaned, conversionId: id ?? "" };
+    void persistFailure(input, cleaned.errorCode ?? "parse_error");
+    return { ...cleaned, conversionId: "" };
   }
   const readyInput = cleaned as ConvertCallInput;
-  const result = await withWait(runOnDevice(readyInput));
+  const result = await runOnDevice(readyInput);
   if (result.status === "failed") {
-    const id = await persistFailure(readyInput, result.errorCode ?? "parse_error");
-    return { ...result, conversionId: id ?? "" };
+    void persistFailure(readyInput, result.errorCode ?? "parse_error");
   }
   return result;
 }

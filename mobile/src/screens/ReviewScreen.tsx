@@ -1,50 +1,48 @@
-import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { ClozeCard } from "../components/ClozeCard";
-import { isDue, markReview } from "../services/firestore";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useAppState } from "../context/AppState";
+import { openCloze } from "../navigation/ref";
+import { isDue } from "../services/srs";
 import { colors, space } from "../theme";
-import type { ReviewResult, SavedItem } from "../types";
 
-type Props = {
-  uid: string;
-  items: SavedItem[];
-};
-
-export function ReviewScreen({ uid, items }: Props) {
-  const due = useMemo(() => items.filter((item) => isDue(item)), [items]);
-  const [cursor, setCursor] = useState(0);
-  const current = due[Math.min(cursor, Math.max(due.length - 1, 0))] ?? null;
-
-  useEffect(() => {
-    if (cursor >= due.length) setCursor(0);
-  }, [cursor, due.length]);
-
-  const schedule = async (result: ReviewResult): Promise<void> => {
-    if (!current) return;
-    await markReview(uid, current, result);
-    setCursor((prev) => (due.length <= 1 ? 0 : prev % Math.max(due.length - 1, 1)));
-  };
-
-  if (!current) {
-    return (
-      <View style={styles.page}>
-        <Text style={styles.title}>复习</Text>
-        <Text style={styles.hint}>今天没有到期的词。去练习页多做几题，或再保存几个新词。</Text>
-      </View>
-    );
-  }
+export function ReviewScreen() {
+  const { wordbook, dueCount } = useAppState();
+  const dueIds = wordbook.filter((item) => isDue(item)).map((item) => item.id);
 
   return (
     <View style={styles.page}>
-      <Text style={styles.title}>复习</Text>
-      <Text style={styles.hint}>待复习 {due.length} 个 · 答完后选间隔</Text>
-      <ClozeCard item={current} showSchedule onSchedule={(result) => void schedule(result)} />
+      <Text style={styles.kicker}>只复习今天到期的条目</Text>
+      <View style={styles.card}>
+        <Text style={styles.label}>今日待复习</Text>
+        <Text style={styles.count}>{dueCount}</Text>
+        <Text style={styles.hint}>未到期的词不会出现在这里。</Text>
+        <Pressable
+          style={[styles.primary, dueIds.length === 0 && styles.off]}
+          disabled={dueIds.length === 0}
+          onPress={() => openCloze(dueIds, "review")}
+        >
+          <Text style={styles.primaryText}>{dueIds.length === 0 ? "今天没有到期" : "开始复习"}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, padding: space.md, gap: 12 },
-  title: { fontSize: 22, fontWeight: "700", color: colors.ink },
-  hint: { color: colors.muted, fontSize: 14 }
+  page: { flex: 1, backgroundColor: colors.bg, padding: space.md, gap: 12 },
+  kicker: { color: colors.muted },
+  card: {
+    backgroundColor: colors.card,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 22,
+    gap: 10,
+    alignItems: "center"
+  },
+  label: { color: colors.muted, fontSize: 14 },
+  count: { fontSize: 64, fontWeight: "800", color: colors.ink },
+  hint: { color: colors.muted, fontSize: 13, textAlign: "center" },
+  primary: { backgroundColor: colors.accent, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, marginTop: 8 },
+  off: { opacity: 0.4 },
+  primaryText: { color: "#fff", fontWeight: "700", fontSize: 16 }
 });

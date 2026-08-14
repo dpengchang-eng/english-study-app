@@ -1,9 +1,8 @@
-import { useMemo, useState } from "react";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,337 +10,220 @@ import {
   TextInput,
   View
 } from "react-native";
-import { SAMPLE_CONVERSION, SAMPLE_INPUT } from "../sample";
-import { convertToAmericanEnglish, defineWord } from "../services/convert";
-import { saveConversion, saveItem } from "../services/firestore";
-import { startListening, stopListening, useSpeechEvents, type SpeechLang } from "../services/stt";
-import { speakAmericanEnglish } from "../services/tts";
+import { useAppState } from "../context/AppState";
+import type { ConvertStackParamList } from "../navigation/types";
+import { abortListening, startListening, stopListening, useSpeechEvents, type SpeechLang } from "../services/stt";
 import { colors, space } from "../theme";
-import type { ConversionResult, WordToken } from "../types";
+import { INPUT_CHAR_CAP, RECORD_MAX_MS } from "../types";
 
-type Props = {
-  uid: string;
-};
-
-type WordKey = `${number}:${number}`;
-
-export function ConvertScreen({ uid }: Props) {
+export function ConvertScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<ConvertStackParamList>>();
+  const { online, recents, startConversion, loadSample, getConversion } = useAppState();
   const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [listening, setListening] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [result, setResult] = useState<ConversionResult | null>(null);
-  const [conversionId, setConversionId] = useState<string>("local");
-  const [selected, setSelected] = useState<Set<WordKey>>(new Set());
-  const [selectMode, setSelectMode] = useState(false);
-  const [activeWord, setActiveWord] = useState<{
-    sentence: string;
-    token: WordToken;
-  } | null>(null);
-  const [defining, setDefining] = useState(false);
+  const [lang, setLang] = useState<SpeechLang>("zh-CN");
+  const [holding, setHolding] = useState(false);
+  const [willCancel, setWillCancel] = useState(false);
+  const [sttError, setSttError] = useState<string | null>(null);
+  const snapshotRef = useRef("");
+  const cancelRef = useRef(false);
+  const draftRef = useRef(draft);
+  const langRef = useRef(lang);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  draftRef.current = draft;
+  langRef.current = lang;
 
   useSpeechEvents({
-    onResult: (text) => setDraft(text),
-    onError: (message) => {
-      setListening(false);
-      setError(message);
+    onResult: (text) => {
+      if (!cancelRef.current) setDraft(text.slice(0, INPUT_CHAR_CAP));
     },
-    onEnd: () => setListening(false)
+    onError: (message) => {
+      setHolding(false);
+      setWillCancel(false);
+      setSttError(message);
+    },
+    onEnd: () => {
+      setHolding(false);
+      setWillCancel(false);
+    }
   });
 
-  const selectedPhrase = useMemo(() => {
-    if (!result || selected.size === 0) return null;
-    const keys = [...selected];
-    const sentenceIndex = Number(keys[0].split(":")[0]);
-    if (keys.some((key) => Number(key.split(":")[0]) !== sentenceIndex)) {
-      return null;
+  const finishRecord = (cancelled: boolean): void => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setHolding(false);
+    setWillCancel(false);
+    if (cancelled) {
+      abortListening();
+      setDraft(snapshotRef.current);
+      return;
     }
-    const sentence = result.sentences[sentenceIndex];
-    const words = keys
-      .map((key) => Number(key.split(":")[1]))
-      .sort((a, b) => a - b)
-      .map((wordIndex) => sentence.words[wordIndex]);
-    return {
-      sentence: sentence.text,
-      phrase: words.map((word) => word.word).join(" "),
-      definition: words
-        .map((word) => word.zh || word.definition)
-        .filter(Boolean)
-        .join("；")
-    };
-  }, [result, selected]);
-
-  const persistResult = async (next: ConversionResult): Promise<void> => {
-    setResult(next);
-    setSelected(new Set());
-    setSelectMode(false);
-    try {
-      const id = await saveConversion(uid, next);
-      setConversionId(id);
-    } catch {
-      setConversionId("local");
-      setError("改写成功，但保存到云端失败。你仍可以先练习。");
-    }
+    stopListening();
   };
 
-  const runConvert = async (): Promise<void> => {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const next = await convertToAmericanEnglish(draft);
-      await persistResult(next);
-      setNotice("已改成地道美语。点单词看释义，点喇叭听发音。");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "改写失败。");
-    } finally {
-      setBusy(false);
-    }
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        snapshotRef.current = draftRef.current;
+        cancelRef.current = false;
+        setWillCancel(false);
+        setSttError(null);
+        setHolding(true);
+        void startListening(langRef.current).catch((error: unknown) => {
+          setHolding(false);
+          setSttError(error instanceof Error ? error.message : "请改用打字。");
+        });
+        timerRef.current = setTimeout(() => finishRecord(false), RECORD_MAX_MS);
+      },
+      onPanResponderMove: (_, gesture) => {
+        const cancel = gesture.dy < -56;
+        cancelRef.current = cancel;
+        setWillCancel(cancel);
+      },
+      onPanResponderRelease: () => finishRecord(cancelRef.current),
+      onPanResponderTerminate: () => finishRecord(true)
+    })
+  ).current;
+
+  const goResult = (id: string): void => {
+    navigation.navigate("Result", { conversionId: id });
   };
 
-  const loadSample = async (): Promise<void> => {
-    setDraft(SAMPLE_INPUT);
-    setError(null);
-    setNotice("这是示例结果，方便你先走完保存和填空。");
-    await persistResult(SAMPLE_CONVERSION);
-  };
-
-  const listen = async (lang: SpeechLang): Promise<void> => {
-    setError(null);
-    try {
-      if (listening) {
-        stopListening();
-        setListening(false);
-        return;
-      }
-      await startListening(lang);
-      setListening(true);
-    } catch (err) {
-      setListening(false);
-      setError(err instanceof Error ? err.message : "请改用打字。");
-    }
-  };
-
-  const openWord = async (sentence: string, token: WordToken): Promise<void> => {
-    if (selectMode) return;
-    setActiveWord({ sentence, token });
-    if (token.definition) return;
-    setDefining(true);
-    try {
-      const extra = await defineWord(token.word, sentence);
-      setActiveWord({
-        sentence,
-        token: { ...token, definition: extra.definition, zh: extra.zh }
-      });
-    } finally {
-      setDefining(false);
-    }
-  };
-
-  const toggleWord = (sentenceIndex: number, wordIndex: number): void => {
-    const key: WordKey = `${sentenceIndex}:${wordIndex}`;
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const persistItem = async (phrase: string, definition: string, sentenceContext: string): Promise<void> => {
-    try {
-      await saveItem(uid, {
-        phrase,
-        definition,
-        sentenceContext,
-        conversionId
-      });
-      setNotice(`已保存 “${phrase}”，可去练习或复习。`);
-      setActiveWord(null);
-      setSelected(new Set());
-    } catch {
-      setError("保存失败。请检查网络后再试。");
-    }
+  const convert = (): void => {
+    const text = draft.trim();
+    if (!text || !online) return;
+    goResult(startConversion(text));
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-        <Text style={styles.kicker}>把中文或英文，改成真正美国人会说的话</Text>
+    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      <Text style={styles.kicker}>输入中文或英文，转成地道美语。不是聊天。</Text>
+      <View style={styles.card}>
         <TextInput
           value={draft}
-          onChangeText={setDraft}
-          placeholder="说或输入一句中文 / 英文"
+          onChangeText={(value) => setDraft(value.slice(0, INPUT_CHAR_CAP))}
+          placeholder="先打字，或按住麦克风说进去"
           placeholderTextColor={colors.muted}
           multiline
+          maxLength={INPUT_CHAR_CAP}
           style={styles.box}
         />
+        <Text style={styles.counter}>
+          {draft.length}/{INPUT_CHAR_CAP}
+        </Text>
         <View style={styles.row}>
-          <Pressable style={[styles.btn, listening && styles.btnOn]} onPress={() => void listen("zh-CN")}>
-            <Text style={styles.btnText}>{listening ? "停止" : "说中文"}</Text>
+          <Pressable style={[styles.chip, lang === "zh-CN" && styles.chipOn]} onPress={() => setLang("zh-CN")}>
+            <Text style={styles.chipText}>中文</Text>
           </Pressable>
-          <Pressable style={[styles.btn, listening && styles.btnOn]} onPress={() => void listen("en-US")}>
-            <Text style={styles.btnText}>说英文</Text>
-          </Pressable>
-          <Pressable style={[styles.btn, styles.btnAccent]} onPress={() => void runConvert()} disabled={busy}>
-            <Text style={styles.btnAccentText}>{busy ? "改写中…" : "改写"}</Text>
+          <Pressable style={[styles.chip, lang === "en-US" && styles.chipOn]} onPress={() => setLang("en-US")}>
+            <Text style={styles.chipText}>英文</Text>
           </Pressable>
         </View>
-        <Pressable onPress={() => void loadSample()}>
-          <Text style={styles.sample}>没有模型密钥？先加载示例</Text>
-        </Pressable>
-        {listening && <Text style={styles.hint}>正在听… 说完会自动填入，也可点「停止」。听不清就打字。</Text>}
-        {busy && <ActivityIndicator color={colors.accent} style={{ marginTop: 8 }} />}
-        {error && <Text style={styles.error}>{error}</Text>}
-        {notice && <Text style={styles.notice}>{notice}</Text>}
-
-        {result && (
-          <View style={styles.result}>
-            <Text style={styles.section}>地道美语</Text>
-            <Text style={styles.rewritten}>{result.rewrittenText}</Text>
-            <View style={styles.row}>
-              <Pressable
-                style={[styles.btn, selectMode && styles.btnOn]}
-                onPress={() => {
-                  setSelectMode((prev) => !prev);
-                  setSelected(new Set());
-                }}
-              >
-                <Text style={styles.btnText}>{selectMode ? "完成选择" : "选短语"}</Text>
-              </Pressable>
-              {selectedPhrase && (
-                <Pressable
-                  style={[styles.btn, styles.btnAccent]}
-                  onPress={() =>
-                    void persistItem(selectedPhrase.phrase, selectedPhrase.definition, selectedPhrase.sentence)
-                  }
-                >
-                  <Text style={styles.btnAccentText}>保存短语</Text>
-                </Pressable>
-              )}
-            </View>
-            {selectMode && <Text style={styles.hint}>点几个连续单词，再按「保存短语」。</Text>}
-
-            {result.sentences.map((sentence, sentenceIndex) => (
-              <View key={`${sentence.text}-${sentenceIndex}`} style={styles.sentence}>
-                <View style={styles.sentenceHead}>
-                  <Text style={styles.sentenceText}>{sentence.text}</Text>
-                  <Pressable onPress={() => void speakAmericanEnglish(sentence.text)} style={styles.play}>
-                    <Text style={styles.playText}>播放</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.words}>
-                  {sentence.words.map((token, wordIndex) => {
-                    const key: WordKey = `${sentenceIndex}:${wordIndex}`;
-                    const on = selected.has(key);
-                    return (
-                      <Pressable
-                        key={key}
-                        style={[styles.word, on && styles.wordOn]}
-                        onPress={() => {
-                          if (selectMode) toggleWord(sentenceIndex, wordIndex);
-                          else void openWord(sentence.text, token);
-                        }}
-                      >
-                        <Text style={styles.wordText}>{token.word}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
+        <View style={styles.row}>
+          <View
+            style={[styles.mic, holding && styles.micHold, willCancel && styles.micCancel]}
+            {...pan.panHandlers}
+          >
+            <Text style={styles.micText}>
+              {willCancel ? "松开取消" : holding ? "上滑取消 · 松手填入" : "按住说话"}
+            </Text>
           </View>
-        )}
-      </ScrollView>
-
-      <Modal visible={activeWord !== null} transparent animationType="fade" onRequestClose={() => setActiveWord(null)}>
-        <Pressable style={styles.mask} onPress={() => setActiveWord(null)}>
-          <Pressable style={styles.sheet} onPress={() => undefined}>
-            <Text style={styles.sheetWord}>{activeWord?.token.word}</Text>
-            {defining && <ActivityIndicator color={colors.accent} />}
-            {!!activeWord?.token.zh && <Text style={styles.sheetZh}>{activeWord.token.zh}</Text>}
-            <Text style={styles.sheetDef}>{activeWord?.token.definition || "正在查这条句子里的意思…"}</Text>
-            <Text style={styles.sheetCtx}>{activeWord?.sentence}</Text>
-            <Pressable
-              style={[styles.btn, styles.btnAccent]}
-              onPress={() => {
-                if (!activeWord) return;
-                void persistItem(
-                  activeWord.token.word,
-                  [activeWord.token.zh, activeWord.token.definition].filter(Boolean).join(" · "),
-                  activeWord.sentence
-                );
-              }}
-            >
-              <Text style={styles.btnAccentText}>保存这个词</Text>
-            </Pressable>
+          <Pressable
+            style={[styles.convert, (!draft.trim() || !online) && styles.convertOff]}
+            onPress={convert}
+            disabled={!draft.trim() || !online}
+          >
+            <Text style={styles.convertText}>{online ? "转换" : "离线"}</Text>
           </Pressable>
+        </View>
+        {!online && <Text style={styles.warn}>离线时不能转换。识别出的字可以先留在输入框。</Text>}
+        {sttError && <Text style={styles.warn}>{sttError}</Text>}
+        <Pressable
+          onPress={() => {
+            setDraft(SAMPLE_INPUT_SAFE);
+            goResult(loadSample());
+          }}
+        >
+          <Text style={styles.sample}>没有模型密钥？加载示例并立刻看结果</Text>
         </Pressable>
-      </Modal>
-    </KeyboardAvoidingView>
+      </View>
+
+      <Text style={styles.section}>最近</Text>
+      {recents.length === 0 && <Text style={styles.hint}>转换过的句子会出现在这里。</Text>}
+      {recents.map((item) => (
+        <Pressable
+          key={item.firestoreId ?? item.id}
+          style={styles.recent}
+          onPress={() => {
+            const live = getConversion(item.firestoreId ?? item.id) ?? item;
+            goResult(live.id);
+          }}
+        >
+          <Text style={styles.recentSrc} numberOfLines={1}>
+            {item.sourceText}
+          </Text>
+          <Text style={styles.recentOut} numberOfLines={2}>
+            {item.status === "loading" ? "转换中…" : item.rewrittenText || "—"}
+          </Text>
+        </Pressable>
+      ))}
+    </ScrollView>
   );
 }
 
+const SAMPLE_INPUT_SAFE = "我想跟你约个时间喝咖啡，看看你方不方便。";
+
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  page: { padding: space.md, paddingBottom: 40, gap: 10 },
+  page: { padding: space.md, paddingBottom: 40, gap: 12 },
   kicker: { color: colors.muted, fontSize: 14 },
-  box: {
-    minHeight: 110,
+  card: {
     backgroundColor: colors.card,
     borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 16,
     padding: 12,
+    gap: 10
+  },
+  box: {
+    minHeight: 120,
     fontSize: 16,
     color: colors.ink,
     textAlignVertical: "top"
   },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  btn: {
-    backgroundColor: colors.chip,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10
+  counter: { alignSelf: "flex-end", color: colors.muted, fontSize: 12 },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" },
+  chip: { backgroundColor: colors.chip, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  chipOn: { backgroundColor: colors.chipOn },
+  chipText: { color: colors.ink, fontWeight: "600" },
+  mic: {
+    flex: 1,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center"
   },
-  btnOn: { backgroundColor: colors.chipOn },
-  btnText: { color: colors.ink, fontWeight: "600" },
-  btnAccent: { backgroundColor: colors.accent },
-  btnAccentText: { color: "#fff", fontWeight: "700" },
-  sample: { color: colors.accent, fontSize: 14 },
-  hint: { color: colors.muted, fontSize: 13 },
-  error: { color: colors.warn, fontSize: 14 },
-  notice: { color: colors.good, fontSize: 14 },
-  result: { gap: 12, marginTop: 8 },
-  section: { fontSize: 18, fontWeight: "700", color: colors.ink },
-  rewritten: { fontSize: 20, lineHeight: 30, color: colors.ink },
-  sentence: {
+  micHold: { backgroundColor: "#E8B89A" },
+  micCancel: { backgroundColor: "#E8C4C0" },
+  micText: { color: colors.ink, fontWeight: "700" },
+  convert: {
+    backgroundColor: colors.accent,
+    borderRadius: 12,
+    paddingHorizontal: 22,
+    paddingVertical: 14
+  },
+  convertOff: { opacity: 0.45 },
+  convertText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  warn: { color: colors.warn, fontSize: 13 },
+  sample: { color: colors.accent, fontSize: 13 },
+  section: { fontSize: 18, fontWeight: "700", color: colors.ink, marginTop: 8 },
+  hint: { color: colors.muted },
+  recent: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 1,
     borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 14,
     padding: 12,
-    gap: 10
+    gap: 4
   },
-  sentenceHead: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  sentenceText: { flex: 1, fontSize: 16, lineHeight: 24, color: colors.ink },
-  play: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  playText: { color: colors.ink, fontWeight: "700" },
-  words: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  word: { backgroundColor: colors.chip, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6 },
-  wordOn: { backgroundColor: colors.chipOn },
-  wordText: { color: colors.ink, fontSize: 15 },
-  mask: { flex: 1, backgroundColor: "rgba(28,25,22,0.35)", justifyContent: "flex-end" },
-  sheet: {
-    backgroundColor: colors.card,
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    gap: 8
-  },
-  sheetWord: { fontSize: 28, fontWeight: "700", color: colors.ink },
-  sheetZh: { fontSize: 16, color: colors.accent },
-  sheetDef: { fontSize: 16, lineHeight: 24, color: colors.ink },
-  sheetCtx: { fontSize: 14, color: colors.muted, marginBottom: 8 }
+  recentSrc: { color: colors.muted, fontSize: 13 },
+  recentOut: { color: colors.ink, fontSize: 15 }
 });

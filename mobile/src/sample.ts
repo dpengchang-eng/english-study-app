@@ -1,28 +1,37 @@
-import type { ConversionResult } from "./types";
+import { Timestamp } from "firebase/firestore";
+import type { Conversion } from "./types";
 
 export const SAMPLE_INPUT = "我想跟你约个时间喝咖啡，看看你方不方便。";
 
-export const SAMPLE_CONVERSION: ConversionResult = {
+const text = "I'd like to grab coffee with you sometime — does that work for you?";
+
+export const SAMPLE_CONVERSION: Conversion = {
+  id: "sample",
   sourceText: SAMPLE_INPUT,
   sourceLang: "zh",
-  rewrittenText: "I'd like to grab coffee with you sometime — does that work for you?",
+  rewrittenText: text,
+  status: "ready",
+  createdAt: Timestamp.now(),
   sentences: [
     {
-      text: "I'd like to grab coffee with you sometime — does that work for you?",
-      words: [
-        { word: "I'd", definition: "I would; a natural spoken contraction.", zh: "我想" },
-        { word: "like", definition: "used to make a polite request or wish.", zh: "想要" },
-        { word: "to", definition: "marks the verb that follows.", zh: "（不定式）" },
-        { word: "grab", definition: "informal: get or do something quickly, here meet for coffee.", zh: "随便喝一杯" },
-        { word: "coffee", definition: "a coffee drink, or a casual meetup over coffee.", zh: "咖啡" },
-        { word: "with", definition: "together with someone.", zh: "和" },
-        { word: "you", definition: "the person being spoken to.", zh: "你" },
-        { word: "sometime", definition: "at an unspecified time in the future.", zh: "找个时间" },
-        { word: "does", definition: "helps form a yes/no question.", zh: "（助动词）" },
-        { word: "that", definition: "refers to the suggested plan.", zh: "那样" },
-        { word: "work", definition: "be convenient or possible.", zh: "方便；行得通" },
-        { word: "for", definition: "from the point of view of someone.", zh: "对……来说" },
-        { word: "you", definition: "the person being asked.", zh: "你" }
+      text,
+      audioStatus: "pending",
+      tokens: [
+        { text: "I'd", start: 0, end: 3, selectable: true },
+        { text: "like", start: 4, end: 8, selectable: true },
+        { text: "to", start: 9, end: 11, selectable: true },
+        { text: "grab", start: 12, end: 16, selectable: true },
+        { text: "coffee", start: 17, end: 23, selectable: true },
+        { text: "with", start: 24, end: 28, selectable: true },
+        { text: "you", start: 29, end: 32, selectable: true },
+        { text: "sometime", start: 33, end: 41, selectable: true },
+        { text: "—", start: 42, end: 43, selectable: false },
+        { text: "does", start: 44, end: 48, selectable: true },
+        { text: "that", start: 49, end: 53, selectable: true },
+        { text: "work", start: 54, end: 58, selectable: true },
+        { text: "for", start: 59, end: 62, selectable: true },
+        { text: "you", start: 63, end: 66, selectable: true },
+        { text: "?", start: 66, end: 67, selectable: false }
       ]
     }
   ]

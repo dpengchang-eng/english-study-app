@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "地道需要语音识别，把你说的中文或英文转成文字。",
         "NSMicrophoneUsageDescription": "地道需要麦克风来听你说的中文或英文。"
@@ -21,7 +21,9 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,7 +35,9 @@
           "microphonePermission": "地道需要麦克风来听你说的中文或英文。",
           "speechRecognitionPermission": "地道需要语音识别，把你说的中文或英文转成文字。"
         }
-      ]
+      ],
+      "expo-web-browser",
+      "expo-apple-authentication"
     ]
   }
 }

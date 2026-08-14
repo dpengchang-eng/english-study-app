@@ -1,30 +1,27 @@
 import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from "firebase/ai";
 import { firebaseApp } from "../firebase";
-import type { ConversionResult, Sentence, SourceLang, WordToken } from "../types";
+import { INPUT_CHAR_CAP, type Conversion, type Sentence, type SourceLang, type Token } from "../types";
 
 const SYSTEM_PROMPT = `You rewrite the user's Chinese or English into authentic, natural American English.
 Keep the meaning. Prefer everyday spoken English: contractions, common idioms, and a natural rhythm.
 Do not sound like a textbook. Do not add extra commentary.
-Return JSON only.`;
+Return JSON only. Tokenize each sentence yourself.`;
 
 const conversionSchema = Schema.object({
   properties: {
-    rewritten: Schema.string({ description: "Full rewritten American English text." }),
+    rewritten: Schema.string(),
     sourceLang: Schema.enumString({ enum: ["zh", "en", "mixed"] }),
     sentences: Schema.array({
       items: Schema.object({
         properties: {
           text: Schema.string(),
-          words: Schema.array({
+          tokens: Schema.array({
             items: Schema.object({
               properties: {
-                word: Schema.string(),
-                definition: Schema.string({
-                  description: "Short English definition in this sentence."
-                }),
-                zh: Schema.string({ description: "Short Chinese gloss." })
-              },
-              optionalProperties: ["zh"]
+                text: Schema.string(),
+                start: Schema.integer(),
+                end: Schema.integer()
+              }
             })
           })
         }
@@ -34,8 +31,11 @@ const conversionSchema = Schema.object({
 });
 
 const userPrompt = (text: string): string =>
-  `Rewrite this into idiomatic American English, then split it into sentences and content words.
-For each word, give a short English definition for THIS sentence, and a short Chinese gloss.
+  `Rewrite this into idiomatic American English.
+Split the rewrite into sentences.
+For each sentence, return tokens[] covering the sentence in order.
+Each token has text plus start/end character offsets into that sentence.
+Include words and short contractions as selectable tokens. Punctuation may be its own token.
 
 Text:
 ${text}`;
@@ -48,26 +48,15 @@ function detectSourceLang(text: string): SourceLang {
   return "en";
 }
 
-function splitSentences(text: string): string[] {
-  return text
-    .split(/(?<=[.!?…])\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function splitWords(sentence: string): WordToken[] {
-  return sentence
-    .split(/\s+/)
-    .map((raw) => raw.replace(/^[“"'([{—–-]+|[”"'.,!?;:)\]}—–-]+$/g, ""))
-    .filter((word) => /[A-Za-z']/.test(word))
-    .map((word) => ({ word, definition: "", zh: "" }));
-}
-
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function parseJsonFromModel(text: string): unknown {
+function asInt(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : fallback;
+}
+
+export function parseJsonFromModel(text: string): unknown {
   const trimmed = text
     .trim()
     .replace(/^```json\s*/i, "")
@@ -77,45 +66,82 @@ function parseJsonFromModel(text: string): unknown {
   return JSON.parse(trimmed) as unknown;
 }
 
-function normalizeResult(raw: unknown, sourceText: string): ConversionResult {
+function fallbackTokens(sentence: string): Token[] {
+  const tokens: Token[] = [];
+  const re = /[A-Za-z']+|[^\sA-Za-z']/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(sentence)) !== null) {
+    const text = match[0];
+    tokens.push({
+      text,
+      start: match.index,
+      end: match.index + text.length,
+      selectable: /[A-Za-z']/.test(text)
+    });
+  }
+  return tokens;
+}
+
+function normalizeTokens(raw: unknown, sentence: string): Token[] {
+  if (!Array.isArray(raw) || raw.length === 0) return fallbackTokens(sentence);
+  const tokens = raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const text = asString(row.text) || asString(row.word);
+      if (!text) return null;
+      const start = asInt(row.start, sentence.indexOf(text));
+      const end = asInt(row.end, start + text.length);
+      return {
+        text,
+        start: start >= 0 ? start : 0,
+        end: end > start ? end : start + text.length,
+        selectable: /[A-Za-z']/.test(text)
+      };
+    })
+    .filter((token): token is Token => token !== null);
+  return tokens.length > 0 ? tokens : fallbackTokens(sentence);
+}
+
+function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?…])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+export function normalizeConversionPayload(raw: unknown, sourceText: string): Pick<Conversion, "rewrittenText" | "sourceLang" | "sentences"> {
   const data = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const rewritten = asString(data.rewritten) || asString(data.rewrittenText) || sourceText;
   const sourceLang =
     data.sourceLang === "zh" || data.sourceLang === "en" || data.sourceLang === "mixed"
       ? data.sourceLang
       : detectSourceLang(sourceText);
-
   const rawSentences = Array.isArray(data.sentences) ? data.sentences : [];
-  const sentences: Sentence[] = rawSentences
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const row = item as Record<string, unknown>;
-      const text = asString(row.text);
-      if (!text) return null;
-      const words = Array.isArray(row.words)
-        ? row.words
-            .map((token) => {
-              if (!token || typeof token !== "object") return null;
-              const wordRow = token as Record<string, unknown>;
-              const word = asString(wordRow.word);
-              if (!word) return null;
-              return {
-                word,
-                definition: asString(wordRow.definition).slice(0, 240),
-                zh: asString(wordRow.zh).slice(0, 80)
-              };
-            })
-            .filter((token): token is WordToken => token !== null)
-        : splitWords(text);
-      return { text, words: words.length > 0 ? words : splitWords(text) };
-    })
-    .filter((sentence): sentence is Sentence => sentence !== null);
+  const sentences: Sentence[] = [];
+  rawSentences.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const row = item as Record<string, unknown>;
+    const text = asString(row.text);
+    if (!text) return;
+    sentences.push({
+      text,
+      tokens: normalizeTokens(row.tokens ?? row.words, text),
+      audioStatus: "pending"
+    });
+  });
 
   return {
-    sourceText,
-    sourceLang,
     rewrittenText: rewritten,
-    sentences: sentences.length > 0 ? sentences : splitSentences(rewritten).map((text) => ({ text, words: splitWords(text) }))
+    sourceLang,
+    sentences:
+      sentences.length > 0
+        ? sentences
+        : splitSentences(rewritten).map((text) => ({
+            text,
+            tokens: fallbackTokens(text),
+            audioStatus: "pending" as const
+          }))
   };
 }
 
@@ -159,9 +185,7 @@ async function convertWithGeminiRest(sourceText: string, apiKey: string): Promis
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
             contents: [{ role: "user", parts: [{ text: userPrompt(sourceText) }] }],
-            generationConfig: {
-              responseMimeType: "application/json"
-            }
+            generationConfig: { responseMimeType: "application/json" }
           })
         }
       );
@@ -182,91 +206,32 @@ async function convertWithGeminiRest(sourceText: string, apiKey: string): Promis
   throw lastError instanceof Error ? lastError : new Error("Gemini REST 调用失败");
 }
 
-export async function convertToAmericanEnglish(sourceText: string): Promise<ConversionResult> {
+export async function convertToAmericanEnglish(
+  sourceText: string
+): Promise<Pick<Conversion, "rewrittenText" | "sourceLang" | "sentences">> {
   const trimmed = sourceText.trim();
-  if (!trimmed) {
-    throw new Error("请先输入或说出一句话。");
-  }
-  if (trimmed.length > 3500) {
-    throw new Error("一次请控制在 3500 字以内。");
-  }
+  if (!trimmed) throw new Error("请先输入或说出一句话。");
+  if (trimmed.length > INPUT_CHAR_CAP) throw new Error(`一次请控制在 ${INPUT_CHAR_CAP} 字以内。`);
 
   const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim();
   let rawText = "";
-  let firebaseError: unknown = null;
 
   try {
     rawText = await convertWithFirebaseAi(trimmed);
   } catch (error) {
-    firebaseError = error;
     if (geminiKey) {
       rawText = await convertWithGeminiRest(trimmed, geminiKey);
     } else {
       const detail = error instanceof Error ? error.message : "未知错误";
       throw new Error(
-        `改写失败：${detail}。可在 mobile/.env 里设置 EXPO_PUBLIC_GEMINI_API_KEY，或在 Firebase 控制台打开 AI Logic / Gemini Developer API。`
+        `转换失败：${detail}。可在 mobile/.env 设置 EXPO_PUBLIC_GEMINI_API_KEY，或打开 Firebase AI Logic。`
       );
     }
   }
 
   try {
-    return normalizeResult(parseJsonFromModel(rawText), trimmed);
+    return normalizeConversionPayload(parseJsonFromModel(rawText), trimmed);
   } catch {
-    if (firebaseError && !geminiKey) {
-      throw new Error("模型返回了无法解析的结果。请再试一次。");
-    }
-    return normalizeResult({ rewritten: rawText }, trimmed);
-  }
-}
-
-export async function defineWord(word: string, sentence: string): Promise<{ definition: string; zh: string }> {
-  const prompt = `In one short English sentence, define "${word}" as used in: "${sentence}".
-Also give a short Chinese gloss.
-Return JSON: {"definition":"...","zh":"..."}`;
-
-  const tryParse = (text: string): { definition: string; zh: string } => {
-    const parsed = parseJsonFromModel(text) as Record<string, unknown>;
-    return {
-      definition: asString(parsed.definition).slice(0, 240) || "No short definition available.",
-      zh: asString(parsed.zh).slice(0, 80)
-    };
-  };
-
-  try {
-    const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
-    const model = getGenerativeModel(ai, {
-      model: "gemini-flash-latest",
-      generationConfig: { responseMimeType: "application/json" }
-    });
-    const result = await model.generateContent(prompt);
-    return tryParse(result.response.text());
-  } catch {
-    const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim();
-    if (!geminiKey) {
-      return { definition: `Used in: ${sentence}`, zh: "" };
-    }
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${encodeURIComponent(geminiKey)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      }
-    );
-    if (!response.ok) {
-      return { definition: `Used in: ${sentence}`, zh: "" };
-    }
-    const payload = (await response.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
-    try {
-      return tryParse(text);
-    } catch {
-      return { definition: `Used in: ${sentence}`, zh: "" };
-    }
+    return normalizeConversionPayload({ rewritten: rawText }, trimmed);
   }
 }

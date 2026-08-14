@@ -34,12 +34,10 @@ export async function startListening(lang: SpeechLang): Promise<void> {
   if (!available) {
     throw new Error("这台设备没有语音识别。请直接打字。");
   }
-
   const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
   if (!permission.granted) {
     throw new Error("没有语音权限。请到系统设置打开，或直接打字。");
   }
-
   ExpoSpeechRecognitionModule.start({
     lang,
     interimResults: true,
@@ -53,5 +51,13 @@ export function stopListening(): void {
     ExpoSpeechRecognitionModule.stop();
   } catch {
     // already stopped
+  }
+}
+
+export function abortListening(): void {
+  try {
+    ExpoSpeechRecognitionModule.abort();
+  } catch {
+    stopListening();
   }
 }

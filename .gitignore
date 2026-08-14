@@ -3,3 +3,9 @@ dist
 .DS_Store
 *.log
 *.tsbuildinfo
+.expo
+.env
+.env.local
+mobile/.env
+functions/node_modules
+functions/lib

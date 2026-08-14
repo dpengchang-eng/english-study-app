@@ -57,3 +57,17 @@ npm run preview
 - 저장소에 `firestore.rules` 파일이 포함되어 있습니다.
 - 참고: GitHub Pages에서는 Firestore Rules를 배포하지 않습니다.  
   Firebase Console(또는 Firebase CLI)에서 별도로 게시해야 합니다.
+
+## Mobile app (地道)
+
+The Expo app in `mobile/` is a **separate product**. v1 is convert-only: Home → Result. Convert runs on the phone with Firebase AI Logic (`getAI` + Gemini Developer API). No Cloud Functions and no extra Gemini API key. The web flashcard app is unchanged.
+
+It does **not** replace this flashcard/quiz web app. GitHub Pages still builds from the repo root.
+
+```bash
+cd mobile
+npm install
+npx expo start
+```
+
+Full steps, env vars, and the happy path: [mobile/README.md](mobile/README.md).

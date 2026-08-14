@@ -20,6 +20,7 @@ export type ConvertCallOutput = {
   outputText: string;
   sentences: Array<{ id: string; index?: number; text: string; tokens?: unknown[] }>;
   errorCode?: ConvertErrorCode;
+  persistResult?: Promise<string | undefined>;
 };
 
 export function mapConvertOutput(
@@ -109,7 +110,7 @@ async function runOnDevice(input: ConvertCallInput): Promise<ConvertCallOutput> 
   if (sentences.length === 0) return failed("parse_error");
 
   void incrementQuota(input.uid);
-  void persistConversion(input.uid, {
+  const persistResult = persistConversion(input.uid, {
     clientRequestId: input.clientRequestId,
     sourceType: input.sourceType,
     sourceLang: gemini.payload.sourceLang,
@@ -125,7 +126,8 @@ async function runOnDevice(input: ConvertCallInput): Promise<ConvertCallOutput> 
     status: "ready",
     sourceLang: gemini.payload.sourceLang,
     outputText: gemini.payload.outputText,
-    sentences
+    sentences,
+    persistResult
   };
 }
 
@@ -146,13 +148,14 @@ async function persistFailure(input: ConvertCallInput, errorCode: ConvertErrorCo
 export async function convertText(input: ConvertCallInput): Promise<ConvertCallOutput> {
   const cleaned = clean(input);
   if ("errorCode" in cleaned && cleaned.status === "failed") {
-    void persistFailure(input, cleaned.errorCode ?? "parse_error");
-    return { ...cleaned, conversionId: "" };
+    const persistResult = persistFailure(input, cleaned.errorCode ?? "parse_error");
+    return { ...cleaned, conversionId: "", persistResult };
   }
   const readyInput = cleaned as ConvertCallInput;
   const result = await runOnDevice(readyInput);
   if (result.status === "failed") {
-    void persistFailure(readyInput, result.errorCode ?? "parse_error");
+    const persistResult = persistFailure(readyInput, result.errorCode ?? "parse_error");
+    return { ...result, persistResult };
   }
   return result;
 }

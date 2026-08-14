@@ -14,7 +14,7 @@ import { INPUT_CHAR_CAP, RECORD_MAX_MS, type SourceType } from "../types";
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<ConvertStackParamList>>();
-  const { online, recents, startConversion } = useAppState();
+  const { online, recents, startConversion, loadSample } = useAppState();
   const [draft, setDraft] = useState("");
   const [holding, setHolding] = useState(false);
   const [sttError, setSttError] = useState<string | null>(null);
@@ -80,6 +80,12 @@ export function HomeScreen() {
         onHoldEnd={onHoldEnd}
         sttError={sttError}
       />
+      <Text
+        style={styles.sample}
+        onPress={() => navigation.navigate("Result", { conversionId: loadSample() })}
+      >
+        没有 Gemini 时，加载示例
+      </Text>
       <Text style={styles.section}>最近</Text>
       {recents.length === 0 ? <EmptyHint text="转换过的句子会出现在这里。" /> : null}
       {recents.map((item) => (
@@ -96,5 +102,6 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   page: { padding: space.md, paddingBottom: 40, gap: 12 },
   kicker: { color: colors.muted, fontSize: 14 },
+  sample: { color: colors.accent, fontSize: 13 },
   section: { fontSize: 18, fontWeight: "700", color: colors.ink, marginTop: 8 }
 });

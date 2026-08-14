@@ -8,14 +8,16 @@ This is a **different product** from the Vite flashcard/quiz web app in the repo
 
 Convert only. Navigation is a stack: **Home → Result**. No bottom tabs. No login screen. Silent anonymous Auth on launch.
 
+This project is on the **Firebase Spark (no-cost) plan**. Cloud Functions cannot be deployed. Convert runs **on the phone**. Do not deploy `functions/`.
+
 v1.1 (not in this PR): tabs, listen, word tap, wordbook, cloze, review, bind Google/Apple.
 
 ## Screens
 
-1. **Home** — text box, hold-to-record (release only fills the box), Convert, offline disables convert, last 20 local conversions.
-2. **Result** — original text + sentences as plain text. Waits 30 seconds (same as `convertText`). After 30s with no response: `gemini_timeout`. Unknown `errorCode`s use `parse_error`. Actions on success: copy all, convert again. No Play button. No tappable words. Home does not show remaining quota.
+1. **Home** — text box, hold-to-record (release only fills the box), Convert, offline disables convert, last 20 local conversions. Home does not show remaining quota.
+2. **Result** — original text + `sentences[].text` only. Waits 30 seconds. After 30s with no response: `gemini_timeout`. Unknown codes use `parse_error`. Success actions: copy all, convert again. No Play button. No tappable words.
 
-Locked Result errors (read `errorCode` from the payload first; HttpsError details are fallback only):
+Locked Result errors:
 
 | errorCode | Copy | Action |
 | --- | --- | --- |
@@ -40,9 +42,26 @@ npx expo start
 
 Scan the QR code with Expo Go.
 
-Convert calls the locked `convertText` Cloud Function (`asia-northeast3`). Deploy functions first (see [functions/README.md](../functions/README.md)).
+### Gemini (required for live convert)
 
-Optional: copy `.env.example` to `.env` and set `EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN` for Expo Go. Do not commit `.env`.
+Convert calls Gemini from the Expo app. It does **not** call a Cloud Function.
+
+1. Prefer **Firebase AI Logic** on project `english-study-app-c645a` (Gemini Developer API). In Firebase Console: Build → Firebase AI Logic → enable Gemini Developer API. No extra key in the app if this works.
+2. If AI Logic is not enabled, copy `.env.example` to `.env` and set `EXPO_PUBLIC_GEMINI_API_KEY`. Restart with `npx expo start -c`.
+
+Never commit `.env` or the real key.
+
+If Gemini is not configured, tap **没有 Gemini 时，加载示例**.
+
+Daily quota: **20/day** on the device, Asia/Seoul day. The counter is stored locally and on `users/{uid}.quota`. Home does not show remaining quota.
+
+### Publish Firestore rules
+
+```bash
+npx -y firebase-tools@latest deploy --only firestore:rules --project english-study-app-c645a
+```
+
+These are prototype Security Rules. Please review them before a wide release.
 
 STT stays on the device. Audio is never uploaded.
 
@@ -52,21 +71,9 @@ STT stays on the device. Audio is never uploaded.
 Conversion { id, createdAt, sourceText, sentences: { id, text }[] }
 ```
 
-The callable may return more (tokens, sourceLang, …). v1 stores the payload but only renders `sentences[].text`.
+The phone may store tokens on the conversion document. v1 UI only renders `sentences[].text`.
 
-Recent list is the last 20 conversions on this device.
-
-## Backend call (unchanged)
-
-```ts
-convertText({ text, sourceType, sourceLangHint?, clientRequestId })
-```
-
-Client UX cap is 500 characters.
-
-`errorCode`: `quota_exceeded | input_empty | input_too_long | input_invalid | gemini_timeout | gemini_unavailable | safety | parse_error`
-
-Business failures return `{ status: "failed", errorCode }` on the callable. They do not throw. Read `errorCode` from the payload first. `HttpsError.details.errorCode` is only a fallback.
+Recent list is the last 20 conversions on this device. Successful converts are also written to `users/{uid}/conversions/{id}`.
 
 ## Typecheck
 

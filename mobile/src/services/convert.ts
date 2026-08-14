@@ -1,9 +1,12 @@
-import { httpsCallable } from "firebase/functions";
-import { functions } from "../firebase";
-import { CONVERT_WAIT_MS, ERROR_COPY, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
-import { errorCodeFromHttpsError, errorCodeFromPayload, resolveErrorCode } from "./convertError";
+import { INPUT_CHAR_CAP, CONVERT_WAIT_MS, ERROR_COPY, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
+import { buildSentences } from "./align";
+import { resolveErrorCode } from "./convertError";
+import { rewriteWithGemini } from "./gemini";
+import { persistConversion } from "./persist";
+import { checkQuota, incrementQuota } from "./quota";
 
 export type ConvertCallInput = {
+  uid: string;
   text: string;
   sourceType: SourceType;
   sourceLangHint?: SourceLang;
@@ -15,16 +18,9 @@ export type ConvertCallOutput = {
   status: "ready" | "failed";
   sourceLang: SourceLang;
   outputText: string;
-  sentences: Array<{
-    id?: string;
-    index?: number;
-    text?: string;
-    tokens?: unknown[];
-  }>;
+  sentences: Array<{ id: string; index?: number; text: string; tokens?: unknown[] }>;
   errorCode?: ConvertErrorCode;
 };
-
-const callable = httpsCallable<ConvertCallInput, ConvertCallOutput>(functions, "convertText");
 
 export function mapConvertOutput(
   output: ConvertCallOutput,
@@ -57,6 +53,20 @@ function failed(errorCode: ConvertErrorCode): ConvertCallOutput {
   return { conversionId: "", status: "failed", sourceLang: "unknown", outputText: "", sentences: [], errorCode };
 }
 
+function clean(input: ConvertCallInput): ConvertCallOutput | ConvertCallInput {
+  const clientRequestId = input.clientRequestId?.trim() ?? "";
+  if (!clientRequestId || clientRequestId.length > 80) return failed("input_invalid");
+  if (input.sourceType !== "text" && input.sourceType !== "voice") return failed("input_invalid");
+  if (input.sourceLangHint != null && !["zh", "en", "mixed", "unknown"].includes(input.sourceLangHint)) {
+    return failed("input_invalid");
+  }
+  if (typeof input.text !== "string") return failed("input_invalid");
+  const text = input.text.replace(/\r\n/g, "\n").replace(/\u0000/g, "").trim();
+  if (!text) return failed("input_empty");
+  if (text.length > INPUT_CHAR_CAP) return failed("input_too_long");
+  return { ...input, text, clientRequestId };
+}
+
 async function withWait(work: Promise<ConvertCallOutput>): Promise<ConvertCallOutput> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<ConvertCallOutput>((resolve) => {
@@ -69,21 +79,40 @@ async function withWait(work: Promise<ConvertCallOutput>): Promise<ConvertCallOu
   }
 }
 
-async function callConvert(input: ConvertCallInput): Promise<ConvertCallOutput> {
-  try {
-    // Business failures return a normal payload: { status: "failed", errorCode }. They do not throw.
-    const data = (await callable(input)).data;
-    const errorCode = errorCodeFromPayload(data);
-    if (data.status === "failed" || errorCode) {
-      return { ...data, status: "failed", errorCode: errorCode ?? "parse_error" };
-    }
-    return data;
-  } catch (error) {
-    // HttpsError is only a fallback (details.errorCode). Do not infer from Firebase codes.
-    return failed(errorCodeFromHttpsError(error) ?? "parse_error");
-  }
+async function runOnDevice(input: ConvertCallInput): Promise<ConvertCallOutput> {
+  const quota = await checkQuota(input.uid);
+  if (quota === "quota_exceeded") return failed("quota_exceeded");
+
+  const gemini = await rewriteWithGemini(input.text, input.sourceLangHint);
+  if (!gemini.ok) return failed(gemini.errorCode);
+
+  const sentences = buildSentences(gemini.payload.sentences);
+  if (sentences.length === 0) return failed("parse_error");
+
+  await incrementQuota(input.uid);
+
+  const conversionId =
+    (await persistConversion(input.uid, {
+      clientRequestId: input.clientRequestId,
+      sourceType: input.sourceType,
+      sourceLang: gemini.payload.sourceLang,
+      sourceText: input.text,
+      outputText: gemini.payload.outputText,
+      sentences
+    })) ?? "";
+
+  return {
+    conversionId,
+    status: "ready",
+    sourceLang: gemini.payload.sourceLang,
+    outputText: gemini.payload.outputText,
+    sentences
+  };
 }
 
+/** On-device convert. Does not call the convertText Cloud Function. */
 export async function convertText(input: ConvertCallInput): Promise<ConvertCallOutput> {
-  return withWait(callConvert(input));
+  const cleaned = clean(input);
+  if ("errorCode" in cleaned && cleaned.status === "failed") return cleaned;
+  return withWait(runOnDevice(cleaned as ConvertCallInput));
 }

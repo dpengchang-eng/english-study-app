@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import NetInfo from "@react-native-community/netinfo";
 import * as Crypto from "expo-crypto";
+import { makeSampleConversion } from "../sample";
 import { convertText, mapConvertOutput } from "../services/convert";
 import { loadRecents, mergeRecent, saveRecents } from "../services/history";
 import type { Conversion, ConvertErrorCode, SourceLang, SourceType } from "../types";
@@ -12,6 +13,7 @@ type AppStateValue = {
   getConversion: (id: string) => Conversion | undefined;
   startConversion: (text: string, options: { sourceType: SourceType; sourceLangHint?: SourceLang }) => string;
   convertAgain: (id: string) => string | undefined;
+  loadSample: () => string;
   failIfLoading: (id: string, errorCode: ConvertErrorCode) => void;
 };
 
@@ -50,6 +52,7 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
       options: { sourceType: SourceType; sourceLangHint?: SourceLang; clientRequestId: string; createdAt: number }
     ) => {
       const output = await convertText({
+        uid,
         text,
         sourceType: options.sourceType,
         sourceLangHint: options.sourceLangHint,
@@ -74,6 +77,12 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
     },
     [uid]
   );
+
+  const loadSample = useCallback((): string => {
+    const sample = makeSampleConversion();
+    upsert(sample);
+    return sample.id;
+  }, [upsert]);
 
   const startConversion = useCallback(
     (text: string, options: { sourceType: SourceType; sourceLangHint?: SourceLang }): string => {
@@ -137,9 +146,10 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
       getConversion,
       startConversion,
       convertAgain,
+      loadSample,
       failIfLoading
     }),
-    [convertAgain, failIfLoading, getConversion, online, recents, startConversion, uid]
+    [convertAgain, failIfLoading, getConversion, loadSample, online, recents, startConversion, uid]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

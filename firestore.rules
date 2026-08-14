@@ -10,22 +10,16 @@ service cloud.firestore {
     //   users/{userId} study fields: totalSessions, totalAnswers, ...
     //   users/{userId}/progress/{wordId}
     //
-    // 地道 convert v1 (Functions-owned):
+    // 地道 convert v1 (Spark, client-side Gemini — no Functions):
     //   users/{uid}
     //     createdAt, updatedAt, locale=zh-CN, timezone=Asia/Seoul
-    //     settings.ttsRate, settings.ttsVoiceHint   — client may write these
-    //     quota.convertCountToday, quota.convertDayKey — Functions only
-    //     stats.conversionCount — Functions only
-    //   users/{uid}/conversions/{id} — client read-only
-    //     clientRequestId, sourceType, sourceLang, sourceText, status,
-    //     errorCode, outputText, model, promptVersion=convert-v1,
-    //     createdAt, completedAt, sentences[{id,index,text,tokens[]}]
-    //     token = {id,index,surface,lemma,pos,isWord,charStart,charEnd}
-    //   users/{uid}/requests/{clientRequestId} — Functions only, 24h TTL
+    //     quota.convertCountToday, quota.convertDayKey — client may write
+    //   users/{uid}/conversions/{id} — owner create + read
+    //     sourceText, outputText, sentences[{id,text,tokens?}], createdAt
     //
-    // Isolated next-cut collections (client-writable, not convert v1):
-    //   users/{uid}/wordbook/{id}  WordbookItem.dueAt + syncState + blankSpan
-    //   users/{uid}/settings/didao quizSize / speechRate / cloudVoice
+    // Isolated next-cut collections (not built in v1 UI):
+    //   users/{uid}/wordbook/{id}
+    //   users/{uid}/settings/didao
     //
     // ===============================================================
 
@@ -45,18 +39,6 @@ service cloud.firestore {
       return request.resource.data[field] is string
         && request.resource.data[field].size() >= minLen
         && request.resource.data[field].size() <= maxLen;
-    }
-
-    function quotaUnchanged() {
-      return request.resource.data.get('quota', {}) == resource.data.get('quota', {});
-    }
-
-    function didaoStatsUnchanged() {
-      return request.resource.data.get('stats', {}) == resource.data.get('stats', {});
-    }
-
-    function clientCreateHasNoFunctionsFields() {
-      return !request.resource.data.keys().hasAny(['quota', 'stats']);
     }
 
     function isValidWordbook(data) {
@@ -105,6 +87,20 @@ service cloud.firestore {
         && data.cloudVoice is bool;
     }
 
+    function isValidConversion(data) {
+      return data.sourceText is string
+        && data.sourceText.size() >= 1
+        && data.sourceText.size() <= 500
+        && data.outputText is string
+        && data.outputText.size() >= 1
+        && data.outputText.size() <= 4000
+        && data.sentences is list
+        && data.sentences.size() >= 1
+        && data.sentences.size() <= 40
+        && data.createdAt is timestamp
+        && data.status == 'ready';
+    }
+
     match /words/{wordId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && !exists(/databases/$(database)/documents/words/$(wordId));
@@ -113,8 +109,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && clientCreateHasNoFunctionsFields();
-      allow update: if isOwner(userId) && quotaUnchanged() && didaoStatsUnchanged();
+      allow create, update: if isOwner(userId);
       allow delete: if false;
 
       match /progress/{wordId} {
@@ -123,7 +118,8 @@ service cloud.firestore {
 
       match /conversions/{conversionId} {
         allow read: if isOwner(userId);
-        allow create, update, delete: if false;
+        allow create: if isOwner(userId) && isValidConversion(request.resource.data);
+        allow update, delete: if false;
       }
 
       match /requests/{clientRequestId} {

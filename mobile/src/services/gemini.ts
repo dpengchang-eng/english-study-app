@@ -153,10 +153,10 @@ export async function rewriteWithGemini(text: string, hint?: SourceLang): Promis
     if (aiLogic.ok || aiLogic.errorCode === "safety" || aiLogic.errorCode === "parse_error") {
       return aiLogic;
     }
+    const key = geminiApiKey();
+    if (!key) return { ok: false, errorCode: "gemini_unavailable" };
+    return await callRestKey(text, key, hint);
   } catch (error) {
-    if (mapThrown(error) === "safety") return { ok: false, errorCode: "safety" };
+    return { ok: false, errorCode: mapThrown(error) };
   }
-  const key = geminiApiKey();
-  if (!key) return { ok: false, errorCode: "gemini_unavailable" };
-  return callRestKey(text, key, hint);
 }

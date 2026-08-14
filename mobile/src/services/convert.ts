@@ -1,4 +1,4 @@
-import { INPUT_CHAR_CAP, CONVERT_WAIT_MS, ERROR_COPY, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
+import { CONVERT_WAIT_MS, ERROR_COPY, SERVER_TEXT_MAX, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
 import { buildSentences } from "./align";
 import { resolveErrorCode } from "./convertError";
 import { rewriteWithGemini } from "./gemini";
@@ -63,7 +63,7 @@ function clean(input: ConvertCallInput): ConvertCallOutput | ConvertCallInput {
   if (typeof input.text !== "string") return failed("input_invalid");
   const text = input.text.replace(/\r\n/g, "\n").replace(/\u0000/g, "").trim();
   if (!text) return failed("input_empty");
-  if (text.length > INPUT_CHAR_CAP) return failed("input_too_long");
+  if (text.length > SERVER_TEXT_MAX) return failed("input_too_long");
   return { ...input, text, clientRequestId };
 }
 
@@ -83,7 +83,12 @@ async function runOnDevice(input: ConvertCallInput): Promise<ConvertCallOutput> 
   const quota = await checkQuota(input.uid);
   if (quota === "quota_exceeded") return failed("quota_exceeded");
 
-  const gemini = await rewriteWithGemini(input.text, input.sourceLangHint);
+  let gemini;
+  try {
+    gemini = await rewriteWithGemini(input.text, input.sourceLangHint);
+  } catch {
+    return failed("gemini_unavailable");
+  }
   if (!gemini.ok) return failed(gemini.errorCode);
 
   const sentences = buildSentences(gemini.payload.sentences);
@@ -98,7 +103,9 @@ async function runOnDevice(input: ConvertCallInput): Promise<ConvertCallOutput> 
       sourceLang: gemini.payload.sourceLang,
       sourceText: input.text,
       outputText: gemini.payload.outputText,
-      sentences
+      sentences,
+      status: "ready",
+      errorCode: null
     })) ?? "";
 
   return {
@@ -110,9 +117,31 @@ async function runOnDevice(input: ConvertCallInput): Promise<ConvertCallOutput> 
   };
 }
 
+async function persistFailure(input: ConvertCallInput, errorCode: ConvertErrorCode): Promise<string | undefined> {
+  return persistConversion(input.uid, {
+    clientRequestId: input.clientRequestId || "unknown",
+    sourceType: input.sourceType === "voice" ? "voice" : "text",
+    sourceLang: input.sourceLangHint ?? "unknown",
+    sourceText: typeof input.text === "string" ? input.text : "",
+    outputText: "",
+    sentences: [],
+    status: "failed",
+    errorCode
+  });
+}
+
 /** On-device convert. Does not call the convertText Cloud Function. */
 export async function convertText(input: ConvertCallInput): Promise<ConvertCallOutput> {
   const cleaned = clean(input);
-  if ("errorCode" in cleaned && cleaned.status === "failed") return cleaned;
-  return withWait(runOnDevice(cleaned as ConvertCallInput));
+  if ("errorCode" in cleaned && cleaned.status === "failed") {
+    const id = await persistFailure(input, cleaned.errorCode ?? "parse_error");
+    return { ...cleaned, conversionId: id ?? "" };
+  }
+  const readyInput = cleaned as ConvertCallInput;
+  const result = await withWait(runOnDevice(readyInput));
+  if (result.status === "failed") {
+    const id = await persistFailure(readyInput, result.errorCode ?? "parse_error");
+    return { ...result, conversionId: id ?? "" };
+  }
+  return result;
 }

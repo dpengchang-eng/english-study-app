@@ -1,3 +1,5 @@
+import { SENTENCE_CAP } from "../types";
+
 type GeminiToken = { surface: string; lemma: string; pos: string; isWord: boolean };
 
 export type StoredToken = {
@@ -99,5 +101,6 @@ export function buildSentences(raw: Array<{ text?: unknown; tokens?: unknown }>)
         : [];
       return { id, index, text, tokens: alignTokens(text, tokens, id) };
     })
-    .filter((sentence): sentence is StoredSentence => sentence !== null);
+    .filter((sentence): sentence is StoredSentence => sentence !== null)
+    .slice(0, SENTENCE_CAP);
 }

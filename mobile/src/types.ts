@@ -31,6 +31,8 @@ export type Conversion = {
 };
 
 export const INPUT_CHAR_CAP = 500;
+export const SERVER_TEXT_MAX = 2000;
+export const SENTENCE_CAP = 15;
 export const RECORD_MAX_MS = 30_000;
 export const CONVERT_WAIT_MS = 30_000;
 export const RECENT_CAP = 20;

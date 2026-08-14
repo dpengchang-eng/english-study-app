@@ -14,8 +14,13 @@ service cloud.firestore {
     //   users/{uid}
     //     createdAt, updatedAt, locale=zh-CN, timezone=Asia/Seoul
     //     quota.convertCountToday, quota.convertDayKey — client may write
-    //   users/{uid}/conversions/{id} — owner create + read
-    //     sourceText, outputText, sentences[{id,text,tokens?}], createdAt
+    //     (20/day Asia/Seoul is enforced on the device, not here)
+    //   users/{uid}/conversions/{id} — create only if request.auth.uid == uid
+    //     field names unchanged: clientRequestId, sourceType, sourceLang,
+    //     sourceText (<=2000), outputText, status ready|failed, errorCode,
+    //     model, promptVersion, createdAt, completedAt,
+    //     sentences (<=15) [{id,index,text,tokens[]}]
+    //     token when present must include id and lemma
     //
     // Isolated next-cut collections (not built in v1 UI):
     //   users/{uid}/wordbook/{id}
@@ -87,18 +92,66 @@ service cloud.firestore {
         && data.cloudVoice is bool;
     }
 
+    function tokenHasIdLemma(token) {
+      return token.keys().hasAll(['id', 'lemma'])
+        && token.id is string
+        && token.lemma is string;
+    }
+
+    function tokensOk(tokens) {
+      return tokens is list
+        && tokens.size() <= 80
+        && (tokens.size() == 0 || tokenHasIdLemma(tokens[0]))
+        && (tokens.size() < 2 || tokenHasIdLemma(tokens[1]))
+        && (tokens.size() < 3 || tokenHasIdLemma(tokens[2]));
+    }
+
+    function sentenceOk(sentence) {
+      return sentence.id is string
+        && sentence.text is string
+        && (!sentence.keys().hasAny(['tokens']) || tokensOk(sentence.tokens));
+    }
+
+    function sentencesOk(list) {
+      return list.size() <= 15
+        && (list.size() == 0 || sentenceOk(list[0]))
+        && (list.size() < 2 || sentenceOk(list[1]))
+        && (list.size() < 3 || sentenceOk(list[2]))
+        && (list.size() < 4 || sentenceOk(list[3]))
+        && (list.size() < 5 || sentenceOk(list[4]))
+        && (list.size() < 6 || sentenceOk(list[5]))
+        && (list.size() < 7 || sentenceOk(list[6]))
+        && (list.size() < 8 || sentenceOk(list[7]))
+        && (list.size() < 9 || sentenceOk(list[8]))
+        && (list.size() < 10 || sentenceOk(list[9]))
+        && (list.size() < 11 || sentenceOk(list[10]))
+        && (list.size() < 12 || sentenceOk(list[11]))
+        && (list.size() < 13 || sentenceOk(list[12]))
+        && (list.size() < 14 || sentenceOk(list[13]))
+        && (list.size() < 15 || sentenceOk(list[14]));
+    }
+
+    function isLockedErrorCode(code) {
+      return code in [
+        'quota_exceeded', 'input_empty', 'input_too_long', 'input_invalid',
+        'gemini_timeout', 'gemini_unavailable', 'safety', 'parse_error'
+      ];
+    }
+
     function isValidConversion(data) {
       return data.sourceText is string
-        && data.sourceText.size() >= 1
-        && data.sourceText.size() <= 500
+        && data.sourceText.size() <= 2000
         && data.outputText is string
-        && data.outputText.size() >= 1
-        && data.outputText.size() <= 4000
         && data.sentences is list
-        && data.sentences.size() >= 1
-        && data.sentences.size() <= 40
+        && sentencesOk(data.sentences)
         && data.createdAt is timestamp
-        && data.status == 'ready';
+        && (
+          (data.status == 'ready'
+            && data.sourceText.size() >= 1
+            && data.outputText.size() >= 1
+            && data.sentences.size() >= 1)
+          || (data.status == 'failed' && isLockedErrorCode(data.errorCode))
+        );
     }
 
     match /words/{wordId} {
@@ -117,8 +170,10 @@ service cloud.firestore {
       }
 
       match /conversions/{conversionId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidConversion(request.resource.data);
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null
+          && request.auth.uid == userId
+          && isValidConversion(request.resource.data);
         allow update, delete: if false;
       }
 

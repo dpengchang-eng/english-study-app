@@ -1,7 +1,10 @@
 import { addDoc, collection, Timestamp } from "firebase/firestore";
 import { db } from "../firebase";
-import type { SourceLang, SourceType } from "../types";
+import type { ConvertErrorCode, SourceLang, SourceType } from "../types";
 import type { StoredSentence } from "./align";
+
+const PROMPT_VERSION = "convert-v1";
+const MODEL = "gemini-2.0-flash";
 
 export async function persistConversion(
   uid: string,
@@ -12,6 +15,8 @@ export async function persistConversion(
     sourceText: string;
     outputText: string;
     sentences: StoredSentence[];
+    status: "ready" | "failed";
+    errorCode?: ConvertErrorCode | null;
   }
 ): Promise<string | undefined> {
   try {
@@ -20,11 +25,11 @@ export async function persistConversion(
       sourceType: row.sourceType,
       sourceLang: row.sourceLang,
       sourceText: row.sourceText,
-      status: "ready",
-      errorCode: null,
+      status: row.status,
+      errorCode: row.errorCode ?? null,
       outputText: row.outputText,
-      model: "gemini-2.0-flash",
-      promptVersion: "convert-v1",
+      model: MODEL,
+      promptVersion: PROMPT_VERSION,
       createdAt: Timestamp.now(),
       completedAt: Timestamp.now(),
       sentences: row.sentences

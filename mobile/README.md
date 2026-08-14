@@ -15,7 +15,7 @@ v1.1 (not in this PR): tabs, listen, word tap, wordbook, cloze, review, bind Goo
 ## Screens
 
 1. **Home** — text box, hold-to-record (release only fills the box), Convert, offline disables convert, last 20 local conversions. Home does not show remaining quota.
-2. **Result** — original text + `sentences[].text` only. Waits 30 seconds. After 30s with no response: `gemini_timeout`. Unknown codes use `parse_error`. Success actions: copy all, convert again. No Play button. No tappable words.
+2. **Result** — original text + `sentences[].text` only. Waits 30 seconds. After 30s with no response: `gemini_timeout`. Unknown codes use `parse_error`. `input_too_long` only if text > 2000 (UI still caps at 500). Success actions: copy all, convert again. No Play button. No tappable words. The UI never shows raw Gemini errors.
 
 Locked Result errors:
 
@@ -53,7 +53,9 @@ Never commit `.env` or the real key.
 
 If Gemini is not configured, tap **没有 Gemini 时，加载示例**.
 
-Daily quota: **20/day** on the device, Asia/Seoul day. The counter is stored locally and on `users/{uid}.quota`. Home does not show remaining quota.
+Daily quota: **20/day** on the device, Asia/Seoul day. Not enforced by Firestore rules. The counter is stored locally and on `users/{uid}.quota`. Home does not show remaining quota.
+
+On failure the client writes `users/{uid}/conversions` with `status=failed` and `errorCode`. Field names stay the same. `sourceText` ≤ 2000, `sentences` ≤ 15. Tokens include `id` and `lemma` when present. Writes only when `request.auth.uid == uid`.
 
 ### Publish Firestore rules
 

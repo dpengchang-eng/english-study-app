@@ -13,7 +13,7 @@ v1.1 (not in this PR): tabs, listen, word tap, wordbook, cloze, review, bind Goo
 ## Screens
 
 1. **Home** — text box, hold-to-record (release only fills the box), Convert, offline disables convert, last 20 local conversions.
-2. **Result** — original text + sentences as plain text. Skeleton / failed / timeout. Actions: copy all, convert again. No Play button. No tappable words.
+2. **Result** — original text + sentences as plain text. Skeleton / failed / timeout. `quota_exceeded` shows 「今天的转换次数用完了」 (and 「绑定后每天 80 次」 if still anonymous) with 回首页, no Retry. Other `errorCode`s have their own Result copy. Actions on success: copy all, convert again. No Play button. No tappable words. Home does not show remaining quota.
 
 Components: `ComposeCard`, `MicButton`, `OfflineBanner`, `HistoryRow`, `SentenceList`, `ErrorState`, `EmptyHint`.
 

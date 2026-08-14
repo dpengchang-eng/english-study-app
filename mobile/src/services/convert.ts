@@ -1,6 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 import { ERROR_COPY, type ConvertErrorCode, type Conversion, type SourceLang, type SourceType } from "../types";
+import { errorCodeFromHttpsError, errorCodeFromPayload } from "./convertError";
 
 export type ConvertCallInput = {
   text: string;
@@ -47,15 +48,24 @@ export function errorMessage(code?: ConvertErrorCode): string {
   return code ? ERROR_COPY[code] : "转换失败。";
 }
 
+function failed(errorCode: ConvertErrorCode): ConvertCallOutput {
+  return { conversionId: "", status: "failed", sourceLang: "unknown", outputText: "", sentences: [], errorCode };
+}
+
 export async function convertText(input: ConvertCallInput): Promise<ConvertCallOutput> {
   try {
     const result = await callable(input);
-    return result.data;
-  } catch (error) {
-    const code = typeof error === "object" && error && "code" in error ? String((error as { code: string }).code) : "";
-    if (code.includes("unauthenticated")) {
-      return { conversionId: "", status: "failed", sourceLang: "unknown", outputText: "", sentences: [], errorCode: "input_invalid" };
+    const data = result.data;
+    const errorCode = errorCodeFromPayload(data);
+    if (errorCode || data.status === "failed") {
+      return { ...data, status: "failed", errorCode: errorCode ?? data.errorCode };
     }
-    return { conversionId: "", status: "failed", sourceLang: "unknown", outputText: "", sentences: [], errorCode: "gemini_unavailable" };
+    return data;
+  } catch (error) {
+    const fromDetails = errorCodeFromHttpsError(error);
+    if (fromDetails) return failed(fromDetails);
+    const code = typeof error === "object" && error && "code" in error ? String((error as { code: string }).code) : "";
+    if (code.includes("unauthenticated")) return failed("input_invalid");
+    return failed("gemini_unavailable");
   }
 }

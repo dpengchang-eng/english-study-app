@@ -35,7 +35,7 @@ export const RECORD_MAX_MS = 30_000;
 export const RECENT_CAP = 20;
 
 export const ERROR_COPY: Record<ConvertErrorCode, string> = {
-  quota_exceeded: "今日转换次数已用完。",
+  quota_exceeded: "今天的转换次数用完了",
   input_empty: "请先输入内容。",
   input_too_long: "文字太长。",
   input_invalid: "输入无效。",

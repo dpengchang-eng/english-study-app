@@ -7,6 +7,7 @@ import { EmptyHint } from "../components/EmptyHint";
 import { ErrorState } from "../components/ErrorState";
 import { SentenceList } from "../components/SentenceList";
 import { useAppState } from "../context/AppState";
+import { auth } from "../firebase";
 import type { ConvertStackParamList } from "../navigation/types";
 import { colors, space } from "../theme";
 
@@ -17,6 +18,7 @@ export function ResultScreen() {
   const { getConversion, convertAgain } = useAppState();
   const conversion = getConversion(conversionId);
   const [copied, setCopied] = useState(false);
+  const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
 
   if (!conversion) {
     return (
@@ -43,7 +45,14 @@ export function ResultScreen() {
     <ScrollView contentContainerStyle={styles.page}>
       <Text style={styles.source}>{conversion.sourceText}</Text>
       {conversion.status === "loading" ? <SentenceList sentences={[]} loading /> : null}
-      {conversion.status === "failed" ? <ErrorState errorCode={conversion.errorCode} onRetry={again} /> : null}
+      {conversion.status === "failed" ? (
+        <ErrorState
+          errorCode={conversion.errorCode}
+          isAnonymous={isAnonymous}
+          onRetry={again}
+          onGoHome={() => navigation.navigate("Home")}
+        />
+      ) : null}
       {conversion.status === "ready" ? <SentenceList sentences={conversion.sentences} /> : null}
       {conversion.status === "ready" ? (
         <View style={styles.actions}>

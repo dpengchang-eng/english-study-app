@@ -11,7 +11,7 @@ import { auth } from "../firebase";
 import { openLookup } from "../navigation/rootNav";
 import type { ConvertStackParamList } from "../navigation/types";
 import { ensureTappableTokens } from "../services/align";
-import { speakAmerican, stopSpeaking } from "../services/tts";
+import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
 import { CONVERT_WAIT_MS, type Sentence, type Token } from "../types";
 
@@ -38,6 +38,7 @@ export function ResultScreen() {
   }));
   const [copied, setCopied] = useState(false);
   const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
+  const [speakError, setSpeakError] = useState<string | null>(null);
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
 
   useEffect(() => {
@@ -73,7 +74,8 @@ export function ResultScreen() {
   };
 
   const play = (sentence: Sentence): void => {
-    speakAmerican(sentence.text);
+    setSpeakError(null);
+    speakAmerican(sentence.text, () => setSpeakError(SPEAK_FAIL_TEXT));
   };
 
   const openTokens = (sentence: Sentence, tokens: Token[]): void => {
@@ -113,6 +115,7 @@ export function ResultScreen() {
           onGoHome={() => navigation.navigate("Home")}
         />
       ) : null}
+      {speakError ? <Text style={styles.speakError}>{speakError}</Text> : null}
       {conversion.status === "ready" ? (
         <SentenceList
           sentences={sentences}
@@ -146,6 +149,7 @@ export function ResultScreen() {
 const styles = StyleSheet.create({
   page: { padding: space.md, paddingBottom: 40, gap: 16, backgroundColor: colors.bg, flexGrow: 1 },
   source: { color: colors.muted, fontSize: 14, lineHeight: 22 },
+  speakError: { color: colors.warn, fontSize: 14 },
   phrase: { backgroundColor: colors.accentSoft, borderRadius: 12, padding: 12 },
   phraseText: { color: colors.ink, fontWeight: "700" },
   actions: { flexDirection: "row", gap: 8 },

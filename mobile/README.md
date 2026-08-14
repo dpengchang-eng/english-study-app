@@ -66,6 +66,8 @@ Client UX cap is 500 characters.
 
 `errorCode`: `quota_exceeded | input_empty | input_too_long | input_invalid | gemini_timeout | gemini_unavailable | safety | parse_error`
 
+Business failures return `{ status: "failed", errorCode }` on the callable. They do not throw. Read `errorCode` from the payload first. `HttpsError.details.errorCode` is only a fallback.
+
 ## Typecheck
 
 ```bash

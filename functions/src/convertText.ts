@@ -24,6 +24,7 @@ type RequestRecord = {
   expireAt: Timestamp;
 };
 
+/** Business failures return this payload. They do not throw. */
 function emptyOutput(errorCode: ConvertErrorCode, sourceLang: SourceLang = "unknown"): ConvertTextOutput {
   return {
     conversionId: "",

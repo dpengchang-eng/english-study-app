@@ -24,6 +24,8 @@ Output:
 
 `errorCode`: `quota_exceeded | input_empty | input_too_long | input_invalid | gemini_timeout | gemini_unavailable | safety | parse_error`
 
+Business failures return a normal callable payload `{ status: "failed", errorCode }`. They do not throw. The client reads `errorCode` from the payload first. `HttpsError` (`details.errorCode`) is only a fallback.
+
 The same `clientRequestId` returns the previous success and does not charge quota again.
 
 Quota: 20/day anonymous, 80/day after Google/Apple link. Day boundary is Asia/Seoul.

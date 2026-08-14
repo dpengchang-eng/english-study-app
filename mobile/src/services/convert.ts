@@ -71,14 +71,15 @@ async function withWait(work: Promise<ConvertCallOutput>): Promise<ConvertCallOu
 
 async function callConvert(input: ConvertCallInput): Promise<ConvertCallOutput> {
   try {
-    const result = await callable(input);
-    const data = result.data;
+    // Business failures return a normal payload: { status: "failed", errorCode }. They do not throw.
+    const data = (await callable(input)).data;
     const errorCode = errorCodeFromPayload(data);
-    if (errorCode || data.status === "failed") {
+    if (data.status === "failed" || errorCode) {
       return { ...data, status: "failed", errorCode: errorCode ?? "parse_error" };
     }
     return data;
   } catch (error) {
+    // HttpsError is only a fallback (details.errorCode). Do not infer from Firebase codes.
     return failed(errorCodeFromHttpsError(error) ?? "parse_error");
   }
 }

@@ -38,12 +38,13 @@ function errorCodeFromDetails(details: unknown): ConvertErrorCode | undefined {
   return asConvertErrorCode(row.code);
 }
 
-/** Branch on errorCode. Unknown codes become parse_error. Do not infer from Firebase codes. */
+/** Fallback only. Read payload errorCode first. Unknown codes become parse_error. */
 export function errorCodeFromHttpsError(error: unknown): ConvertErrorCode | undefined {
   if (!error || typeof error !== "object") return undefined;
   return errorCodeFromDetails(detailsFromError(error));
 }
 
+/** Business failures: { status: "failed", errorCode } on a normal callable return. */
 export function errorCodeFromPayload(payload: { errorCode?: unknown; status?: unknown }): ConvertErrorCode | undefined {
   if (payload.errorCode == null) return undefined;
   return resolveErrorCode(payload.errorCode);

@@ -11,7 +11,7 @@ import { colors, space } from "../theme";
 export function LookupScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, "Lookup">>();
-  const { tokens, sentenceText, conversionId } = route.params;
+  const { tokens, sentenceTokens, sentenceText, conversionId } = route.params;
   const { savePhrase } = useWordbook();
   const { phrase, lemmaKey } = phraseFromTokens(tokens);
   const [ipa, setIpa] = useState("");
@@ -33,14 +33,19 @@ export function LookupScreen() {
   }, [lemmaKey, phrase]);
 
   const save = async (): Promise<void> => {
-    const result = await savePhrase({
-      tokens,
-      sentenceText,
-      conversionId,
-      ipa,
-      senses
-    });
-    setSaved(result.created ? "已加入词本" : "词本里已有，复习进度没变");
+    try {
+      const result = await savePhrase({
+        tokens,
+        sentenceTokens: sentenceTokens ?? tokens,
+        sentenceText,
+        conversionId,
+        ipa,
+        senses
+      });
+      setSaved(result.created ? "已加入词本" : "词本里已有，复习进度没变");
+    } catch {
+      setSaved("只能存 1 到 6 个连续单词");
+    }
   };
 
   return (

@@ -1,19 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Token, WordbookItem } from "../types";
-import { dueTodayCount, loadWordbook, saveToWordbook, updateWordbookSrs } from "../services/wordbook";
+import { dueNowCount, loadWordbook, saveToWordbook } from "../services/wordbook";
+
+type SavePhraseInput = {
+  tokens: Token[];
+  sentenceTokens?: Token[];
+  sentenceText: string;
+  conversionId: string;
+  ipa: string;
+  senses: string[];
+};
 
 type WordbookValue = {
   items: WordbookItem[];
   dueCount: number;
-  savePhrase: (input: {
-    tokens: Token[];
-    sentenceText: string;
-    conversionId: string;
-    ipa: string;
-    senses: string[];
-  }) => Promise<{ created: boolean; item: WordbookItem }>;
-  applyItem: (item: WordbookItem) => Promise<void>;
-  getItem: (id: string) => WordbookItem | undefined;
+  savePhrase: (input: SavePhraseInput) => Promise<{ created: boolean; item: WordbookItem }>;
+  syncItems: (next: WordbookItem[]) => void;
 };
 
 const WordbookContext = createContext<WordbookValue | null>(null);
@@ -26,13 +28,7 @@ export function WordbookProvider({ uid, children }: { uid: string; children: Rea
   }, [uid]);
 
   const savePhrase = useCallback(
-    async (input: {
-      tokens: Token[];
-      sentenceText: string;
-      conversionId: string;
-      ipa: string;
-      senses: string[];
-    }) => {
+    async (input: SavePhraseInput) => {
       const result = await saveToWordbook(uid, items, input);
       setItems(result.items);
       return { created: result.created, item: result.item };
@@ -40,25 +36,18 @@ export function WordbookProvider({ uid, children }: { uid: string; children: Rea
     [items, uid]
   );
 
-  const applyItem = useCallback(
-    async (item: WordbookItem) => {
-      const next = await updateWordbookSrs(uid, items, item);
-      setItems(next);
-    },
-    [items, uid]
-  );
-
-  const getItem = useCallback((id: string) => items.find((item) => item.id === id), [items]);
+  const syncItems = useCallback((next: WordbookItem[]) => {
+    setItems(next);
+  }, []);
 
   const value = useMemo<WordbookValue>(
     () => ({
       items,
-      dueCount: dueTodayCount(items),
+      dueCount: dueNowCount(items),
       savePhrase,
-      applyItem,
-      getItem
+      syncItems
     }),
-    [applyItem, getItem, items, savePhrase]
+    [items, savePhrase, syncItems]
   );
 
   return <WordbookContext.Provider value={value}>{children}</WordbookContext.Provider>;

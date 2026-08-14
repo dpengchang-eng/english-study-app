@@ -1,26 +1,46 @@
 import { useNavigation } from "@react-navigation/native";
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
-import { applySrs, blankedText, clearPracticeAnswers, createPractice, submitPractice } from "../services/practice";
+import { blankedText, clearPracticeAnswers, createPractice, type PracticeSession, submitPractice } from "../services/practice";
 import { colors, space } from "../theme";
 
 export function ClozeScreen() {
   const navigation = useNavigation();
-  const { items, applyItem, getItem } = useWordbook();
-  const [session] = useState(() => createPractice(items));
+  const { uid } = useAppState();
+  const { items, syncItems } = useWordbook();
+  const [session, setSession] = useState<PracticeSession | null>(null);
   const [index, setIndex] = useState(0);
   const [draft, setDraft] = useState("");
-  const [wrongs, setWrongs] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
   useEffect(() => {
-    return () => clearPracticeAnswers();
-  }, []);
+    let live = true;
+    void createPractice(uid, itemsRef.current).then((next) => {
+      if (live) setSession(next);
+    });
+    return () => {
+      live = false;
+      clearPracticeAnswers();
+    };
+  }, [uid]);
+
+  if (session === null) {
+    return (
+      <View style={styles.page}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
 
   const card = session.cards[index];
-  const done = session.cards.length === 0 || index >= session.cards.length;
+  const done = session.cards.length === 0 || index >= session.cards.length || !card;
 
   const finish = (): void => {
     clearPracticeAnswers();
@@ -29,45 +49,42 @@ export function ClozeScreen() {
 
   const next = (): void => {
     setDraft("");
-    setWrongs(0);
+    setAttempt(0);
     setRevealed(false);
     setMessage("");
-    if (index + 1 >= session.cards.length) {
+    if (!session || index + 1 >= session.cards.length) {
       finish();
       return;
     }
     setIndex((value) => value + 1);
   };
 
-  const grade = async (kind: "again" | "good"): Promise<void> => {
-    if (!card) return;
-    const item = getItem(card.wordbookItemId);
-    if (item) await applyItem(applySrs(item, kind));
-    next();
-  };
-
-  const submit = (): void => {
-    if (!card || revealed) return;
-    if (submitPractice(card.wordbookItemId, draft)) {
-      void grade("good");
+  const submit = async (): Promise<void> => {
+    if (!card || revealed || busy) return;
+    setBusy(true);
+    const nextAttempt = attempt + 1;
+    const { result, items: nextItems } = await submitPractice(uid, items, card.wordbookItemId, draft, nextAttempt);
+    syncItems(nextItems);
+    setAttempt(nextAttempt);
+    if (result.correct) {
+      setBusy(false);
+      next();
       return;
     }
-    const nextWrongs = wrongs + 1;
-    setWrongs(nextWrongs);
-    if (nextWrongs === 1) {
+    if (nextAttempt === 1) {
       setMessage(card.hintGloss ? `提示：${card.hintGloss}` : "再试一次");
+      setBusy(false);
       return;
     }
-    const item = getItem(card.wordbookItemId);
     setRevealed(true);
-    setMessage(item ? `答案：${item.phrase}` : "这题先跳过");
-    if (item) void applyItem(applySrs(item, "again"));
+    setMessage(result.expected ? `答案：${result.expected}` : "这题先跳过");
+    setBusy(false);
   };
 
   if (done) {
     return (
       <View style={styles.page}>
-        <Text style={styles.title}>今天的填空做完了。</Text>
+        <Text style={styles.title}>现在没有待复习的填空。</Text>
         <Pressable style={styles.btn} onPress={finish}>
           <Text style={styles.btnText}>返回</Text>
         </Pressable>
@@ -100,7 +117,7 @@ export function ClozeScreen() {
           <Text style={styles.btnText}>下一题</Text>
         </Pressable>
       ) : (
-        <Pressable style={styles.btn} onPress={submit}>
+        <Pressable style={[styles.btn, busy && styles.off]} onPress={() => void submit()} disabled={busy}>
           <Text style={styles.btnText}>提交</Text>
         </Pressable>
       )}
@@ -124,5 +141,6 @@ const styles = StyleSheet.create({
   },
   msg: { color: colors.ink, fontSize: 16 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 14, alignItems: "center" },
+  off: { opacity: 0.45 },
   btnText: { color: "#fff", fontWeight: "700", fontSize: 16 }
 });

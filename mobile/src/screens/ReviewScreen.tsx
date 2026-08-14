@@ -8,7 +8,7 @@ export function ReviewScreen() {
   const { items, dueCount } = useWordbook();
   return (
     <View style={styles.page}>
-      <Text style={styles.count}>今天待复习 {dueCount} 个</Text>
+      <Text style={styles.count}>待复习 {dueCount} 个</Text>
       {items.length === 0 ? <EmptyHint text="词本空着。先去转换一句话，点单词存进词本。" /> : null}
       <Pressable style={[styles.btn, dueCount === 0 && styles.off]} onPress={openCloze} disabled={dueCount === 0}>
         <Text style={styles.btnText}>开始填空</Text>

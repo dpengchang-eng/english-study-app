@@ -78,6 +78,7 @@ export function ResultScreen() {
     setPicked(null);
     openLookup({
       tokens,
+      sentenceTokens: sentence.tokens ?? tokens,
       sentenceText: sentence.text,
       conversionId: conversion.id
     });

@@ -1,10 +1,21 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, doc, getDocs, setDoc, Timestamp } from "firebase/firestore";
+import { collection, doc, getDocs, query, setDoc, Timestamp, where, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
-import type { Token, WordbookItem } from "../types";
+import type { SrsBox, Token, WordbookItem } from "../types";
 import { slugLemma } from "./slug";
 
 const localKey = (uid: string): string => `didao-wordbook-v1:${uid}`;
+
+const BOX_DAYS: Record<SrsBox, 0 | 1 | 3 | 7> = { 0: 0, 1: 1, 2: 3, 3: 7 };
+
+function asBox(value: unknown, intervalDays?: unknown): SrsBox {
+  if (value === 1 || value === 2 || value === 3) return value;
+  if (value === 0) return 0;
+  if (intervalDays === 1) return 1;
+  if (intervalDays === 3) return 2;
+  if (intervalDays === 7) return 3;
+  return 0;
+}
 
 function asItem(id: string, raw: Record<string, unknown>): WordbookItem | null {
   if (typeof raw.phrase !== "string" || !raw.phrase.trim()) return null;
@@ -16,7 +27,7 @@ function asItem(id: string, raw: Record<string, unknown>): WordbookItem | null {
     raw.dueAt && typeof raw.dueAt === "object" && "toMillis" in raw.dueAt
       ? Number((raw.dueAt as { toMillis: () => number }).toMillis())
       : Number(raw.dueAt ?? Date.now());
-  const interval = raw.intervalDays;
+  const box = asBox(raw.box, raw.intervalDays);
   return {
     id,
     phrase: raw.phrase,
@@ -28,7 +39,8 @@ function asItem(id: string, raw: Record<string, unknown>): WordbookItem | null {
     blankEnd: Number(raw.blankEnd ?? raw.phrase.length),
     createdAt,
     dueAt,
-    intervalDays: interval === 1 || interval === 3 || interval === 7 ? interval : 0,
+    box,
+    intervalDays: BOX_DAYS[box],
     lastResult:
       raw.lastResult === "again" || raw.lastResult === "1" || raw.lastResult === "3" || raw.lastResult === "7"
         ? raw.lastResult
@@ -38,28 +50,33 @@ function asItem(id: string, raw: Record<string, unknown>): WordbookItem | null {
   };
 }
 
-export async function loadWordbook(uid: string): Promise<WordbookItem[]> {
-  try {
-    const raw = await AsyncStorage.getItem(localKey(uid));
-    const local = raw ? (JSON.parse(raw) as WordbookItem[]) : [];
-    const snap = await getDocs(collection(db, "users", uid, "wordbook"));
-    const remote = snap.docs
-      .map((row) => asItem(row.id, row.data() as Record<string, unknown>))
-      .filter((item): item is WordbookItem => item !== null);
-    const byId = new Map<string, WordbookItem>();
-    for (const item of local) byId.set(item.id, item);
-    for (const item of remote) byId.set(item.id, item);
-    const list = [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
-    await AsyncStorage.setItem(localKey(uid), JSON.stringify(list));
-    return list;
-  } catch {
-    try {
-      const raw = await AsyncStorage.getItem(localKey(uid));
-      return raw ? (JSON.parse(raw) as WordbookItem[]) : [];
-    } catch {
-      return [];
-    }
+export function selectWordTokens(selected: Token[], sentenceTokens: Token[] = selected): Token[] {
+  const words = selected.filter((token) => token.isWord);
+  if (words.length !== selected.length || words.length < 1 || words.length > 6) {
+    throw new Error("只能存 1 到 6 个连续单词");
   }
+  const ids = new Set(words.map((token) => token.id));
+  const wordIds = sentenceTokens.filter((token) => token.isWord).map((token) => token.id);
+  const positions = words.map((token) => wordIds.indexOf(token.id)).sort((a, b) => a - b);
+  if (positions.some((index) => index < 0)) throw new Error("只能存 1 到 6 个连续单词");
+  for (let i = 1; i < positions.length; i += 1) {
+    if (positions[i] !== positions[i - 1] + 1) throw new Error("只能存 1 到 6 个连续单词");
+  }
+  return wordIds.slice(positions[0], positions[positions.length - 1] + 1).map((id) => {
+    const token = sentenceTokens.find((item) => item.id === id);
+    if (!token?.isWord) throw new Error("只能存 1 到 6 个连续单词");
+    return token;
+  });
+}
+
+export function phraseFromTokens(tokens: Token[]): { phrase: string; lemmaKey: string; start: number; end: number } {
+  const words = tokens.filter((token) => token.isWord);
+  const phrase = words.map((token) => token.surface).join(" ").trim();
+  const lemmaKey = slugLemma(words.map((token) => token.lemma || token.surface).join(" "));
+  const start = words[0]?.charStart ?? 0;
+  const last = words[words.length - 1];
+  const end = last?.charEnd ?? start + phrase.length;
+  return { phrase, lemmaKey, start, end };
 }
 
 async function writeLocal(uid: string, items: WordbookItem[]): Promise<void> {
@@ -77,6 +94,7 @@ function toFirestore(item: WordbookItem): Record<string, unknown> {
     blankEnd: item.blankEnd,
     createdAt: Timestamp.fromMillis(item.createdAt),
     dueAt: Timestamp.fromMillis(item.dueAt),
+    box: item.box,
     intervalDays: item.intervalDays,
     lastResult: item.lastResult,
     reviewCount: item.reviewCount,
@@ -84,14 +102,49 @@ function toFirestore(item: WordbookItem): Record<string, unknown> {
   };
 }
 
-export function phraseFromTokens(tokens: Token[]): { phrase: string; lemmaKey: string; start: number; end: number } {
-  const words = tokens.filter((token) => token.isWord);
-  const phrase = words.map((token) => token.surface).join(" ").trim();
-  const lemmaKey = slugLemma(words.map((token) => token.lemma || token.surface).join(" "));
-  const start = words[0]?.charStart ?? 0;
-  const last = words[words.length - 1];
-  const end = last?.charEnd ?? start + phrase.length;
-  return { phrase, lemmaKey, start, end };
+export async function loadWordbook(uid: string): Promise<WordbookItem[]> {
+  try {
+    const raw = await AsyncStorage.getItem(localKey(uid));
+    const local = raw ? (JSON.parse(raw) as WordbookItem[]) : [];
+    const snap = await getDocs(collection(db, "users", uid, "wordbook"));
+    const remote = snap.docs
+      .map((row) => asItem(row.id, row.data() as Record<string, unknown>))
+      .filter((item): item is WordbookItem => item !== null);
+    const byId = new Map<string, WordbookItem>();
+    for (const item of local) byId.set(item.id, asItem(item.id, item as unknown as Record<string, unknown>) ?? item);
+    for (const item of remote) byId.set(item.id, item);
+    const list = [...byId.values()].sort((a, b) => a.dueAt - b.dueAt);
+    await writeLocal(uid, list);
+    return list;
+  } catch {
+    try {
+      const raw = await AsyncStorage.getItem(localKey(uid));
+      return raw ? (JSON.parse(raw) as WordbookItem[]) : [];
+    } catch {
+      return [];
+    }
+  }
+}
+
+/** Review query: dueAt <= now, orderBy dueAt. */
+export async function queryDueWordbook(uid: string, now = Date.now()): Promise<WordbookItem[]> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, "users", uid, "wordbook"), where("dueAt", "<=", Timestamp.fromMillis(now)), orderBy("dueAt"))
+    );
+    const remote = snap.docs
+      .map((row) => asItem(row.id, row.data() as Record<string, unknown>))
+      .filter((item): item is WordbookItem => item !== null);
+    if (remote.length) return remote;
+  } catch {
+    // fall back to local
+  }
+  const all = await loadWordbook(uid);
+  return all.filter((item) => item.dueAt <= now).sort((a, b) => a.dueAt - b.dueAt);
+}
+
+export function dueNowCount(items: WordbookItem[], now = Date.now()): number {
+  return items.filter((item) => item.dueAt <= now).length;
 }
 
 export async function saveToWordbook(
@@ -99,13 +152,15 @@ export async function saveToWordbook(
   current: WordbookItem[],
   input: {
     tokens: Token[];
+    sentenceTokens?: Token[];
     sentenceText: string;
     conversionId: string;
     ipa: string;
     senses: string[];
   }
 ): Promise<{ items: WordbookItem[]; created: boolean; item: WordbookItem }> {
-  const { phrase, lemmaKey, start, end } = phraseFromTokens(input.tokens);
+  const words = selectWordTokens(input.tokens, input.sentenceTokens ?? input.tokens);
+  const { phrase, lemmaKey, start, end } = phraseFromTokens(words);
   if (!phrase) throw new Error("没有可保存的词");
   const existing = current.find((item) => item.id === lemmaKey);
   if (existing) {
@@ -123,6 +178,7 @@ export async function saveToWordbook(
     blankEnd: Math.min(760, Math.max(start, end)),
     createdAt: now,
     dueAt: now,
+    box: 0,
     intervalDays: 0,
     lastResult: null,
     reviewCount: 0,
@@ -152,6 +208,7 @@ export async function updateWordbookSrs(uid: string, items: WordbookItem[], next
       doc(db, "users", uid, "wordbook", next.id),
       {
         dueAt: Timestamp.fromMillis(next.dueAt),
+        box: next.box,
         intervalDays: next.intervalDays,
         lastResult: next.lastResult,
         reviewCount: next.reviewCount,
@@ -165,27 +222,4 @@ export async function updateWordbookSrs(uid: string, items: WordbookItem[], next
   } catch {
     return list;
   }
-}
-
-export function dueTodayCount(items: WordbookItem[], now = Date.now()): number {
-  const end = endOfSeoulDay(now);
-  return items.filter((item) => item.dueAt <= end).length;
-}
-
-export function dueItems(items: WordbookItem[], now = Date.now()): WordbookItem[] {
-  const end = endOfSeoulDay(now);
-  return items.filter((item) => item.dueAt <= end);
-}
-
-function endOfSeoulDay(now: number): number {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date(now));
-  const year = Number(parts.find((part) => part.type === "year")?.value);
-  const month = Number(parts.find((part) => part.type === "month")?.value);
-  const day = Number(parts.find((part) => part.type === "day")?.value);
-  return Date.parse(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T23:59:59+09:00`);
 }

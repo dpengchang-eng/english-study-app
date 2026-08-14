@@ -16,6 +16,7 @@ export type RootStackParamList = {
   Tabs: undefined;
   Lookup: {
     tokens: Token[];
+    sentenceTokens?: Token[];
     sentenceText: string;
     conversionId: string;
   };

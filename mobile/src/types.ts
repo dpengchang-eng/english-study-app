@@ -29,6 +29,8 @@ export type Sentence = {
 
 export type AudioStatus = "ready" | "pending" | "unavailable";
 
+export type SrsBox = 0 | 1 | 2 | 3;
+
 export type WordbookItem = {
   id: string;
   phrase: string;
@@ -40,6 +42,7 @@ export type WordbookItem = {
   blankEnd: number;
   createdAt: number;
   dueAt: number;
+  box: SrsBox;
   intervalDays: 0 | 1 | 3 | 7;
   lastResult: "again" | "1" | "3" | "7" | null;
   reviewCount: number;
@@ -51,6 +54,13 @@ export type PracticeCard = {
   sentenceText: string;
   blankSpan: { start: number; end: number };
   hintGloss: string;
+};
+
+export type SubmitPracticeResult = {
+  correct: boolean;
+  expected: string;
+  dueAt: number;
+  box: SrsBox;
 };
 
 export type Conversion = {

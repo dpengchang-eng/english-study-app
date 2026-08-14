@@ -45,13 +45,17 @@ Each sentence card has **听**. `audioStatus` is local UI only: `ready` / `pendi
 
 Tap a word to open the lookup half-sheet (phonetic + up to 3 Chinese senses). Long-press, then tap another word in the same sentence to select up to 6 consecutive words and save a phrase.
 
-`saveToWordbook` writes `users/{uid}/wordbook/{slug(lemma)}` on the client. If the item already exists, SRS is not reset.
+`saveToWordbook` writes `users/{uid}/wordbook/{slug(lemma)}` on the client. Only `isWord` tokens, 1–6 consecutive `tokenIds`. If the item already exists, `dueAt` / `box` are not reset.
+
+Firestore: signed-in owner can read/write `wordbook` and `practiceSessions` (`isOwner` only).
 
 ## Cloze + review
 
-Only saved wordbook items. Review tab shows today's due count. **开始填空** opens a modal.
+Only saved wordbook items. Review query is `dueAt <= now`, `orderBy dueAt`. **开始填空** opens a modal.
 
-`createPractice` / `submitPractice` run on the device. Cards show `sentenceText` with a blank. The answer stays in memory, not on the card. First wrong shows `hintGloss`. Two wrongs reveal the answer.
+`createPractice` writes UI cards `{wordbookItemId, sentenceText, blankSpan, hintGloss}` only. No `answer` / `answerNorm` in the UI payload. Answers stay in memory (or a session doc the UI does not use as the question source).
+
+`submitPractice` is the only correctness source. It returns `{correct, expected, dueAt, box}`. First wrong shows `hintGloss`. Two wrongs reveal `result.expected`.
 
 SRS: Again → box 0, due in 60s. Good → 1 day, then 3 days, then 7 days.
 

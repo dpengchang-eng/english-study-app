@@ -40,7 +40,7 @@ npm install
 npx expo start
 ```
 
-Scan the QR code with Expo Go.
+Scan the QR code with Expo Go. Expo Go does not include `expo-speech-recognition`, so the mic is hidden and typing still works. Do not use a custom dev client for v1.
 
 ### Gemini (two paths)
 

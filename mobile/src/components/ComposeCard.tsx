@@ -12,7 +12,8 @@ export function ComposeCard({
   holding,
   onHoldStart,
   onHoldEnd,
-  sttError
+  sttError,
+  showMic
 }: {
   value: string;
   onChangeText: (text: string) => void;
@@ -23,13 +24,14 @@ export function ComposeCard({
   onHoldStart: () => void;
   onHoldEnd: () => void;
   sttError: string | null;
+  showMic: boolean;
 }) {
   return (
     <View style={styles.card}>
       <TextInput
         value={value}
         onChangeText={onChangeText}
-        placeholder="先打字，或按住麦克风说进去"
+        placeholder={showMic ? "先打字，或按住麦克风说进去" : "先打字"}
         placeholderTextColor={colors.muted}
         multiline
         maxLength={INPUT_CHAR_CAP}
@@ -39,8 +41,12 @@ export function ComposeCard({
         {value.length}/{INPUT_CHAR_CAP}
       </Text>
       <View style={styles.row}>
-        <MicButton holding={holding} onHoldStart={onHoldStart} onHoldEnd={onHoldEnd} />
-        <Pressable style={[styles.convert, convertDisabled && styles.convertOff]} onPress={onConvert} disabled={convertDisabled}>
+        {showMic ? <MicButton holding={holding} onHoldStart={onHoldStart} onHoldEnd={onHoldEnd} /> : null}
+        <Pressable
+          style={[styles.convert, !showMic && styles.convertGrow, convertDisabled && styles.convertOff]}
+          onPress={onConvert}
+          disabled={convertDisabled}
+        >
           <Text style={styles.convertText}>{convertLabel}</Text>
         </Pressable>
       </View>
@@ -72,6 +78,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 14
   },
+  convertGrow: { flex: 1, alignItems: "center" },
   convertOff: { opacity: 0.45 },
   convertText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   warn: { color: colors.warn, fontSize: 13 }

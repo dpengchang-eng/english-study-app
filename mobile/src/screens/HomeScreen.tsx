@@ -8,7 +8,7 @@ import { HistoryRow } from "../components/HistoryRow";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { useAppState } from "../context/AppState";
 import type { ConvertStackParamList } from "../navigation/types";
-import { startListening, stopListening, useSpeechEvents } from "../services/stt";
+import { isSpeechAvailable, startListening, stopListening, useSpeechEvents } from "../services/stt";
 import { colors, space } from "../theme";
 import { INPUT_CHAR_CAP, RECORD_MAX_MS, type SourceType } from "../types";
 
@@ -20,6 +20,7 @@ export function HomeScreen() {
   const [sttError, setSttError] = useState<string | null>(null);
   const sourceTypeRef = useRef<SourceType>("text");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showMic = isSpeechAvailable();
 
   useSpeechEvents({
     onResult: (text) => {
@@ -79,6 +80,7 @@ export function HomeScreen() {
         onHoldStart={onHoldStart}
         onHoldEnd={onHoldEnd}
         sttError={sttError}
+        showMic={showMic}
       />
       <Text
         style={styles.sample}

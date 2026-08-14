@@ -74,6 +74,7 @@ export type Conversion = {
   sourceType: SourceType;
   sourceLang?: SourceLang;
   outputText?: string;
+  syncState?: "synced" | "pending" | "error";
 };
 
 export const INPUT_CHAR_CAP = 500;

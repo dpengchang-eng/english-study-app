@@ -274,6 +274,8 @@ export async function updateWordbookSrs(uid: string, items: WordbookItem[], next
     await writeLocal(uid, synced);
     return synced;
   } catch {
-    return list;
+    const failed = list.map((item) => (item.id === next.id ? { ...next, syncState: "error" as const } : item));
+    await writeLocal(uid, failed);
+    return failed;
   }
 }

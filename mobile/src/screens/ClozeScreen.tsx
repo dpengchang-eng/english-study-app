@@ -28,6 +28,7 @@ export function ClozeScreen() {
   const [attempt, setAttempt] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [message, setMessage] = useState("");
+  const [syncWarn, setSyncWarn] = useState("");
   const [busy, setBusy] = useState(false);
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -73,6 +74,7 @@ export function ClozeScreen() {
     setAttempt(0);
     setRevealed(false);
     setMessage("");
+    setSyncWarn("");
     if (!session || index + 1 >= session.cards.length) {
       finish();
       return;
@@ -93,6 +95,8 @@ export function ClozeScreen() {
       session.sessionId
     );
     syncItems(nextItems);
+    const updated = nextItems.find((item) => item.id === card.wordbookItemId);
+    setSyncWarn(updated?.syncState === "error" ? "未同步到云" : "");
     setAttempt(nextAttempt);
     if (result.correct) {
       setBusy(false);
@@ -141,6 +145,7 @@ export function ClozeScreen() {
         style={styles.input}
       />
       {message ? <Text style={styles.msg}>{message}</Text> : null}
+      {syncWarn ? <Text style={styles.sync}>{syncWarn}</Text> : null}
       {revealed ? (
         <Pressable style={styles.btn} onPress={next}>
           <Text style={styles.btnText}>下一题</Text>
@@ -177,6 +182,7 @@ const styles = StyleSheet.create({
     color: colors.ink
   },
   msg: { color: colors.ink, fontSize: 16 },
+  sync: { color: colors.warn, fontSize: 14 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 14, alignItems: "center" },
   off: { opacity: 0.45 },
   btnText: { color: "#fff", fontWeight: "700", fontSize: 16 }

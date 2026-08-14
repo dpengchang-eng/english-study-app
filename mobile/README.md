@@ -58,19 +58,15 @@ If convert fails locally, tap **没有 Gemini 时，加载示例**.
 
 ### App Check debug token (Expo / local)
 
-AI Logic auto-enforces App Check. Local Expo / Expo Go uses the **debug provider**, not Play Integrity or App Attest. Do not block v1 on a production attestation setup.
+AI Logic auto-enforces App Check. Local Expo / Expo Go / Expo web uses a **debug token**, not Play Integrity or App Attest. Do not block v1 on a production attestation setup.
 
-1. Open Firebase Console → App Check → the **web** app for `english-study-app-c645a` → Manage debug tokens.
-2. Add a debug token (or copy the one Metro prints: `App Check debug token: …`).
-3. Copy `mobile/.env.example` to `mobile/.env` and set:
+The web app already has a registered token named **didao expo web local**. The app uses it by default. `CustomProvider.getToken` returns `{ token, expireTimeMillis }` and never throws. On web, `FIREBASE_APPCHECK_DEBUG_TOKEN` is set before `initializeAppCheck`.
 
-```
-EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN=your-debug-token
-```
+To use a different token:
 
-4. Restart with `npx expo start -c`.
-
-In `__DEV__`, the SDK also generates a token and logs it if the env var is empty. Register that token or requests are rejected. Never commit `.env` or the real token.
+1. Firebase Console → App Check → the **web** app → Manage debug tokens.
+2. Copy `mobile/.env.example` to `mobile/.env` and set `EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN`.
+3. Restart with `npx expo start -c`.
 
 Daily quota: **20/day** on the device, Asia/Seoul day. Not enforced by Firestore rules. The counter is stored locally and on `users/{uid}.quota`. Home does not show remaining quota.
 

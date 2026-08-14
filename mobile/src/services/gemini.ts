@@ -3,13 +3,12 @@ import { firebaseApp } from "../firebase";
 import type { ConvertErrorCode, SourceLang } from "../types";
 import { CONVERT_WAIT_MS } from "../types";
 
-export const GEMINI_MODEL = "gemini-flash-latest";
-const FALLBACK_MODEL = "gemini-2.0-flash";
+export const GEMINI_MODEL = "gemini-3.6-flash";
 
 const SYSTEM_PROMPT = `You rewrite the user's Chinese or English into authentic, natural American English.
 Keep the meaning. Prefer everyday spoken English: contractions, common idioms, and a natural rhythm.
 Do not sound like a textbook. Do not add extra commentary.
-Return JSON only.`;
+Return JSON only with keys sourceLang, outputText, and sentences.`;
 
 const USER_PROMPT = (text: string, hint?: SourceLang): string =>
   `Rewrite this into idiomatic American English.
@@ -53,11 +52,20 @@ export function parseGeminiJson(text: string): GeminiResult {
     const raw = parseJson(text);
     if (!raw || typeof raw !== "object") return { ok: false, errorCode: "parse_error" };
     const data = raw as Record<string, unknown>;
-    const outputText = typeof data.outputText === "string" ? data.outputText.trim() : "";
-    if (!outputText) return { ok: false, errorCode: "parse_error" };
     if (!Array.isArray(data.sentences) || data.sentences.length === 0) {
       return { ok: false, errorCode: "parse_error" };
     }
+    const fromField =
+      (typeof data.outputText === "string" && data.outputText.trim()) ||
+      (typeof data.rewrite === "string" && data.rewrite.trim()) ||
+      "";
+    const fromSentences = data.sentences
+      .map((row) => (row && typeof row === "object" && "text" in row ? String((row as { text?: unknown }).text ?? "") : ""))
+      .map((text) => text.trim())
+      .filter(Boolean)
+      .join(" ");
+    const outputText = fromField || fromSentences;
+    if (!outputText) return { ok: false, errorCode: "parse_error" };
     return {
       ok: true,
       payload: {
@@ -80,43 +88,23 @@ function mapThrown(error: unknown): ConvertErrorCode {
   return "gemini_unavailable";
 }
 
-async function generate(modelName: string, text: string, hint?: SourceLang): Promise<string> {
-  const ai = getAI(firebaseApp, { backend: googleAIBackend() });
-  const model = getGenerativeModel(
-    ai,
-    {
-      model: modelName,
-      systemInstruction: SYSTEM_PROMPT,
-      generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
-    },
-    { timeout: CONVERT_WAIT_MS }
-  );
-  const result = await model.generateContent(USER_PROMPT(text, hint));
-  return result.response.text();
-}
-
-async function callAiLogic(text: string, hint?: SourceLang): Promise<GeminiResult> {
-  try {
-    const out = await generate(GEMINI_MODEL, text, hint);
-    if (!out.trim()) return { ok: false, errorCode: "parse_error" };
-    return parseGeminiJson(out);
-  } catch (first) {
-    if (mapThrown(first) === "safety") return { ok: false, errorCode: "safety" };
-    if (mapThrown(first) === "gemini_timeout") return { ok: false, errorCode: "gemini_timeout" };
-    try {
-      const out = await generate(FALLBACK_MODEL, text, hint);
-      if (!out.trim()) return { ok: false, errorCode: "parse_error" };
-      return parseGeminiJson(out);
-    } catch (second) {
-      return { ok: false, errorCode: mapThrown(second) };
-    }
-  }
-}
-
 /** Live convert uses Firebase AI Logic + the existing Firebase app. No Gemini API key. */
 export async function rewriteWithGemini(text: string, hint?: SourceLang): Promise<GeminiResult> {
   try {
-    return await callAiLogic(text, hint);
+    const ai = getAI(firebaseApp, { backend: googleAIBackend() });
+    const model = getGenerativeModel(
+      ai,
+      {
+        model: GEMINI_MODEL,
+        systemInstruction: SYSTEM_PROMPT,
+        generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
+      },
+      { timeout: CONVERT_WAIT_MS }
+    );
+    const result = await model.generateContent(USER_PROMPT(text, hint));
+    const out = result.response.text();
+    if (!out.trim()) return { ok: false, errorCode: "parse_error" };
+    return parseGeminiJson(out);
   } catch (error) {
     return { ok: false, errorCode: mapThrown(error) };
   }

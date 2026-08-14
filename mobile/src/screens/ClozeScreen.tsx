@@ -79,7 +79,14 @@ export function ClozeScreen() {
     if (!card || revealed || busy) return;
     setBusy(true);
     const nextAttempt = attempt + 1;
-    const { result, items: nextItems } = await submitPractice(uid, items, card.wordbookItemId, draft, nextAttempt);
+    const { result, items: nextItems } = await submitPractice(
+      uid,
+      itemsRef.current,
+      card.wordbookItemId,
+      draft,
+      nextAttempt,
+      session.sessionId
+    );
     syncItems(nextItems);
     setAttempt(nextAttempt);
     if (result.correct) {

@@ -20,6 +20,12 @@ describe("resolveBlankSpan", () => {
     const span = resolveBlankSpan(sentence, "DINNER", 0, 0);
     assert.equal(sentence.slice(span.start, span.end), "dinner");
   });
+
+  it("finds a multi-word phrase when spaces do not match exactly", () => {
+    const text = "I'd like to grab  coffee with you.";
+    const span = resolveBlankSpan(text, "grab coffee", 0, 4);
+    assert.equal(text.slice(span.start, span.end), "grab  coffee");
+  });
 });
 
 describe("blankParts", () => {

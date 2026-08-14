@@ -23,9 +23,20 @@ export function resolveBlankSpan(
     if (inner >= 0) return { start: start + inner, end: start + inner + needle.length };
     const found = indexInsensitive(sentence, needle);
     if (found >= 0) return { start: found, end: found + needle.length };
+    const flexible = findFlexiblePhrase(sentence, needle);
+    if (flexible) return flexible;
   }
   if (end > start) return { start, end };
   return { start: sentence.length, end: sentence.length };
+}
+
+function findFlexiblePhrase(sentence: string, phrase: string): { start: number; end: number } | null {
+  const words = phrase.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return null;
+  const escaped = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const match = new RegExp(escaped.join("\\s+"), "i").exec(sentence);
+  if (!match) return null;
+  return { start: match.index, end: match.index + match[0].length };
 }
 
 export function blankParts(card: PracticeCard, phrase?: string): { before: string; after: string } {

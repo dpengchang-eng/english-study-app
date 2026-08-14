@@ -1,7 +1,9 @@
-import { addDoc, collection, Timestamp } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { addDoc, collection, doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import type { PracticeCard, SrsBox, SubmitPracticeResult, WordbookItem } from "../types";
 import { resolveBlankSpan } from "./blank";
+import { acceptedAnswers, answerFromSources, isCorrectGuess, type StoredAnswer } from "./practiceGrade";
 import { queryDueWordbook, updateWordbookSrs } from "./wordbook";
 
 export { blankedText, blankParts, FIXED_BLANK, resolveBlankSpan } from "./blank";
@@ -11,36 +13,39 @@ export type PracticeSession = {
   cards: PracticeCard[];
 };
 
-type MemoryAnswer = {
-  expected: string;
-  accepted: string[];
-  item: WordbookItem;
-};
+type MemoryAnswer = StoredAnswer & { item?: WordbookItem };
 
 const memory = new Map<string, MemoryAnswer>();
 
-function normalize(value: string): string {
-  return value.toLowerCase().replace(/['’]/g, "").replace(/\s+/g, " ").trim();
-}
+const answersKey = (uid: string, sessionId: string): string => `didao-practice-answers-v1:${uid}:${sessionId}`;
 
-function editDistance(a: string, b: string): number {
-  const rows = a.length + 1;
-  const cols = b.length + 1;
-  const grid: number[][] = Array.from({ length: rows }, (_, i) => Array.from({ length: cols }, (__, j) => (i === 0 ? j : j === 0 ? i : 0)));
-  for (let i = 1; i < rows; i += 1) {
-    for (let j = 1; j < cols; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      grid[i][j] = Math.min(grid[i - 1][j] + 1, grid[i][j - 1] + 1, grid[i - 1][j - 1] + cost);
-    }
+async function writeAnswerKey(uid: string, sessionId: string, answers: Record<string, StoredAnswer>): Promise<void> {
+  try {
+    await AsyncStorage.setItem(answersKey(uid, sessionId), JSON.stringify(answers));
+  } catch {
+    // submit can still use memory or the wordbook phrase
   }
-  return grid[a.length][b.length];
 }
 
-function isCorrect(guess: string, accepted: string[], expected: string): boolean {
-  const value = normalize(guess);
-  if (!value) return false;
-  if (accepted.includes(value)) return true;
-  return expected.length >= 5 && editDistance(value, normalize(expected)) <= 1;
+async function readLocalAnswerKey(uid: string, sessionId: string): Promise<Record<string, StoredAnswer> | null> {
+  try {
+    const raw = await AsyncStorage.getItem(answersKey(uid, sessionId));
+    return raw ? (JSON.parse(raw) as Record<string, StoredAnswer>) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readRemoteAnswerKey(uid: string, sessionId: string): Promise<Record<string, StoredAnswer> | null> {
+  if (!sessionId || sessionId.startsWith("local")) return null;
+  try {
+    const snap = await getDoc(doc(db, "users", uid, "practiceSessions", sessionId));
+    const key = snap.data()?.answerKey;
+    if (!key || typeof key !== "object") return null;
+    return key as Record<string, StoredAnswer>;
+  } catch {
+    return null;
+  }
 }
 
 function applyBox(item: WordbookItem, box: SrsBox, now: number): WordbookItem {
@@ -63,35 +68,41 @@ function nextGoodBox(box: SrsBox): SrsBox {
 }
 
 export async function createPractice(uid: string, items: WordbookItem[]): Promise<PracticeSession> {
-  memory.clear();
-  const due = await queryDueWordbook(uid);
-  const source = due.length ? due : items.filter((item) => item.dueAt <= Date.now()).sort((a, b) => a.dueAt - b.dueAt);
-  const cards: PracticeCard[] = source.map((item) => {
-    const span = resolveBlankSpan(item.sentenceContext, item.phrase, item.blankStart, item.blankEnd);
-    memory.set(item.id, {
-      expected: item.phrase,
-      accepted: [item.phrase, item.id.replace(/-/g, " "), ...item.phrase.split(/\s+/)].map(normalize).filter(Boolean),
-      item
-    });
-    return {
-      wordbookItemId: item.id,
-      sentenceText: item.sentenceContext,
-      blankSpan: span,
-      hintGloss: item.senses[0] ?? ""
-    };
-  });
-  let sessionId = `local-${Date.now()}`;
   try {
-    const ref = await addDoc(collection(db, "users", uid, "practiceSessions"), {
-      createdAt: Timestamp.now(),
-      status: "active",
-      cards
+    memory.clear();
+    const due = await queryDueWordbook(uid);
+    const source = due.length ? due : items.filter((item) => item.dueAt <= Date.now()).sort((a, b) => a.dueAt - b.dueAt);
+    const answerKey: Record<string, StoredAnswer> = {};
+    const cards: PracticeCard[] = source.map((item) => {
+      const span = resolveBlankSpan(item.sentenceContext, item.phrase, item.blankStart, item.blankEnd);
+      const accepted = acceptedAnswers(item.phrase, item.id);
+      const row = { expected: item.phrase, accepted, item };
+      memory.set(item.id, row);
+      answerKey[item.id] = { expected: item.phrase, accepted };
+      return {
+        wordbookItemId: item.id,
+        sentenceText: item.sentenceContext,
+        blankSpan: span,
+        hintGloss: item.senses[0] ?? ""
+      };
     });
-    sessionId = ref.id;
+    let sessionId = `local-${Date.now()}`;
+    try {
+      const ref = await addDoc(collection(db, "users", uid, "practiceSessions"), {
+        createdAt: Timestamp.now(),
+        status: "active",
+        cards,
+        answerKey
+      });
+      sessionId = ref.id;
+    } catch {
+      // UI still works from the in-memory cards; answers also stay in AsyncStorage
+    }
+    await writeAnswerKey(uid, sessionId, answerKey);
+    return { sessionId, cards };
   } catch {
-    // UI still works from the in-memory cards; answers stay in memory
+    return { sessionId: `local-${Date.now()}`, cards: [] };
   }
-  return { sessionId, cards };
 }
 
 export async function submitPractice(
@@ -99,12 +110,18 @@ export async function submitPractice(
   items: WordbookItem[],
   wordbookItemId: string,
   input: string,
-  attempt: number
+  attempt: number,
+  sessionId?: string
 ): Promise<{ result: SubmitPracticeResult; items: WordbookItem[] }> {
-  const row = memory.get(wordbookItemId);
+  const stored =
+    (sessionId ? await readLocalAnswerKey(uid, sessionId) : null) ??
+    (sessionId ? await readRemoteAnswerKey(uid, sessionId) : null);
+  const current = items.find((item) => item.id === wordbookItemId) ?? memory.get(wordbookItemId)?.item;
+  const row = answerFromSources(memory.get(wordbookItemId), stored?.[wordbookItemId], current);
   const expected = row?.expected ?? "";
-  const correct = row ? isCorrect(input, row.accepted, expected) : false;
-  const current = items.find((item) => item.id === wordbookItemId) ?? row?.item;
+  const accepted = row?.accepted ?? [];
+  const correct = row ? isCorrectGuess(input, accepted, expected) : false;
+  if (row) memory.set(wordbookItemId, { ...row, item: current });
   if (!current) {
     return { result: { correct, expected, dueAt: Date.now(), box: 0 }, items };
   }
@@ -114,7 +131,7 @@ export async function submitPractice(
   }
   const next = applyBox(current, correct ? nextGoodBox(current.box) : 0, Date.now());
   const nextItems = await updateWordbookSrs(uid, items, next);
-  memory.set(wordbookItemId, { expected, accepted: row?.accepted ?? [normalize(expected)], item: next });
+  memory.set(wordbookItemId, { expected, accepted, item: next });
   return { result: { correct, expected, dueAt: next.dueAt, box: next.box }, items: nextItems };
 }
 

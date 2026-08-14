@@ -25,22 +25,24 @@ function fromLocal(lemma: string): LookupResult | undefined {
 }
 
 export async function lookupPhrase(phrase: string, lemma: string): Promise<LookupResult> {
-  const key = (lemma || phrase).toLowerCase().trim();
-  const cached = memory.get(key);
-  if (cached) return cached;
-  const local = fromLocal(key) ?? fromLocal(phrase);
-  if (local) {
-    const clipped = { ipa: local.ipa, senses: local.senses.slice(0, 3) };
-    memory.set(key, clipped);
-    return clipped;
+  try {
+    const key = (lemma || phrase).toLowerCase().trim();
+    const cached = memory.get(key);
+    if (cached) return cached;
+    const local = fromLocal(key) ?? fromLocal(phrase);
+    if (local) {
+      const clipped = { ipa: local.ipa, senses: local.senses.slice(0, 3) };
+      memory.set(key, clipped);
+      return clipped;
+    }
+    const remote = await rewriteLookup(phrase || lemma);
+    if (remote) {
+      const clipped = { ipa: remote.ipa, senses: remote.senses.slice(0, 3) };
+      memory.set(key, clipped);
+      return clipped;
+    }
+    return { ipa: "", senses: ["暂无中文释义"] };
+  } catch {
+    return { ipa: "", senses: ["查词失败，请再试一次"] };
   }
-  const remote = await rewriteLookup(phrase || lemma);
-  if (remote) {
-    const clipped = { ipa: remote.ipa, senses: remote.senses.slice(0, 3) };
-    memory.set(key, clipped);
-    return clipped;
-  }
-  const fallback: LookupResult = { ipa: "", senses: ["暂无中文释义"] };
-  memory.set(key, fallback);
-  return fallback;
 }

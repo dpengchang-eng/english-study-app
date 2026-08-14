@@ -6,6 +6,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useAuth } from "../context/AuthState";
 import { GOOGLE_BIND_FAIL, googleWebClientId } from "../services/googleLinkErrors";
 import { linkCurrentUserWithIdToken, linkCurrentUserWithPopup } from "../services/googleLink";
+import { googleRedirectUriOptions } from "../services/googleRedirect";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -26,7 +27,7 @@ export function useGoogleBind(): {
       selectAccount: true,
       scopes: ["openid", "profile", "email"]
     },
-    { scheme: "didao", path: "oauthredirect", preferLocalhost: true }
+    googleRedirectUriOptions()
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

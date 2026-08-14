@@ -5,7 +5,7 @@ import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
 import { lookupPhrase } from "../services/lookup";
 import { phraseFromTokens } from "../services/wordbook";
-import { speakAmerican, stopSpeaking } from "../services/tts";
+import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
 
 export function LookupScreen() {
@@ -19,6 +19,7 @@ export function LookupScreen() {
   const [senses, setSenses] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState<string | null>(alreadySaved ? "已在词本" : null);
+  const [speakError, setSpeakError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => stopSpeaking();
@@ -26,18 +27,26 @@ export function LookupScreen() {
 
   useEffect(() => {
     let live = true;
-    void lookupPhrase(phrase, lemmaKey).then((result) => {
-      if (!live) return;
-      setIpa(result.ipa);
-      setSenses(result.senses.slice(0, 3));
-      setLoading(false);
-    });
+    void lookupPhrase(phrase, lemmaKey)
+      .then((result) => {
+        if (!live) return;
+        setIpa(result.ipa);
+        setSenses(result.senses.slice(0, 3));
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!live) return;
+        setIpa("");
+        setSenses(["查词失败，请再试一次"]);
+        setLoading(false);
+      });
     return () => {
       live = false;
     };
   }, [lemmaKey, phrase]);
 
   const save = async (): Promise<void> => {
+    if (loading) return;
     try {
       const result = await savePhrase({
         tokens,
@@ -47,7 +56,11 @@ export function LookupScreen() {
         ipa,
         senses: senses.slice(0, 3)
       });
-      setSaved(result.created ? "已加入词本" : "已在词本");
+      if (!result.created) {
+        setSaved("已在词本");
+        return;
+      }
+      setSaved(result.item.syncState === "synced" ? "已加入词本" : "未同步到云");
     } catch {
       setSaved("只能存 1 到 6 个连续单词");
     }
@@ -66,14 +79,21 @@ export function LookupScreen() {
           ))
         : null}
       <View style={styles.row}>
-        <Pressable style={styles.ghost} onPress={() => speakAmerican(phrase)}>
+        <Pressable
+          style={styles.ghost}
+          onPress={() => {
+            setSpeakError(null);
+            speakAmerican(phrase, () => setSpeakError(SPEAK_FAIL_TEXT));
+          }}
+        >
           <Text style={styles.ghostText}>听</Text>
         </Pressable>
-        <Pressable style={styles.btn} onPress={() => void save()}>
+        <Pressable style={[styles.btn, loading && styles.off]} onPress={() => void save()} disabled={loading}>
           <Text style={styles.btnText}>存入词本</Text>
         </Pressable>
       </View>
-      {saved ? <Text style={styles.note}>{saved}</Text> : null}
+      {speakError ? <Text style={styles.warn}>{speakError}</Text> : null}
+      {saved ? <Text style={saved === "未同步到云" ? styles.warn : styles.note}>{saved}</Text> : null}
       <Pressable onPress={() => navigation.goBack()}>
         <Text style={styles.close}>关闭</Text>
       </Pressable>
@@ -92,5 +112,7 @@ const styles = StyleSheet.create({
   ghost: { backgroundColor: colors.accentSoft, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
   ghostText: { color: colors.ink, fontWeight: "700" },
   note: { color: colors.good, fontSize: 14 },
+  warn: { color: colors.warn, fontSize: 14 },
+  off: { opacity: 0.45 },
   close: { color: colors.muted, marginTop: 8 }
 });

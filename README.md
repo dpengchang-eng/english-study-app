@@ -60,7 +60,7 @@ npm run preview
 
 ## Mobile app (地道)
 
-The Expo app in `mobile/` is a **separate product**. v1.1 has tabs 转换 / 词本 / 复习 / 我的. Convert uses `gemini-flash-lite-latest`. Listen uses `expo-speech`. Run in Expo Go — no Xcode. The web flashcard app is unchanged.
+The Expo app in `mobile/` is a **separate product**. v1.1 has tabs 转换 / 词本 / 复习 / 我的. Convert uses `gemini-flash-lite-latest`. Listen uses `expo-speech`. 我的 can bind Google (same anonymous uid, Expo Go / `expo-auth-session`). Run in Expo Go — no Xcode. The web flashcard app is unchanged.
 
 It does **not** replace this flashcard/quiz web app. GitHub Pages still builds from the repo root.
 

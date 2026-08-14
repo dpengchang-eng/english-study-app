@@ -23,7 +23,7 @@ npm install
 cp .env.example .env
 ```
 
-Put the project's dedicated **Gemini Developer API key** in `mobile/.env` as `EXPO_PUBLIC_GEMINI_API_KEY`. Never commit `.env`.
+Put the project's dedicated **Gemini Developer API key** in `mobile/.env` as `EXPO_PUBLIC_GEMINI_API_KEY`. For 绑定 Google, also set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (Firebase Web client ID). Never commit `.env`.
 
 ```bash
 npx expo start -c
@@ -35,7 +35,7 @@ Expo Go does not include `expo-speech-recognition`. The mic is hidden. Typing co
 
 ## Convert
 
-Unchanged from v1: `gemini-flash-lite-latest`, REST key if set, else Firebase AI Logic. UI cap 500. Locked `errorCode`s. 30s timeout. 20/day on-device quota (Asia/Seoul).
+Unchanged from v1: `gemini-flash-lite-latest`, REST key if set, else Firebase AI Logic. UI cap 500. Locked `errorCode`s. 30s timeout. Quota is on-device (Asia/Seoul): **20/day** while anonymous, **80/day** after a successful Google link. Remaining shows only on 我的.
 
 ## Listen
 
@@ -47,7 +47,7 @@ Tap an `isWord` token to open the lookup half-sheet (phonetic + up to 3 Chinese 
 
 `saveToWordbook` writes `users/{uid}/wordbook/{slug(lemma)}` on the client. Only `isWord` tokens, 1–6 consecutive `tokenIds`. If the item already exists, show **已在词本** and do not reset `dueAt` / `box`.
 
-Firestore: signed-in owner can read/write `wordbook` and `practiceSessions` (`isOwner` only).
+Firestore: signed-in owner can read/write `conversions`, `wordbook`, and `practiceSessions` (`isOwner` only). Quota stays on the device, not in rules. `dictCache` is closed. Storage is closed.
 
 ## Cloze + review
 
@@ -61,7 +61,25 @@ SRS: Again → box 0, due in 60s. Good → 1 day, then 3 days, then 7 days.
 
 ## 我的
 
-Placeholder this cut. No Google / Apple bind.
+Locked copy:
+
+- Unbound: **未绑定** + **数据只在这台设备** + button **绑定 Google**. Three read-only rows stay. Offline: button disabled.
+- Bound: Google email + **数据在云端**. No logout. No login wall. No Apple.
+- Success: swap this state in place. Same anonymous uid (`linkWithCredential` / `linkWithPopup`). Never `signIn` a new empty account.
+- Cancel: no toast. Fail: **没绑上，再试一次**. Google already used by another Firebase user: **这个 Google 已经用过了** — do not switch uid, do not wipe the wordbook.
+
+## Google bind (Expo Go)
+
+Do **not** add `@react-native-google-signin/google-signin` or `expo-speech-recognition`. Those native modules crash or fail in Expo Go.
+
+1. Firebase Console → Authentication → Sign-in method → enable **Google**.
+2. Copy the **Web client ID** into `mobile/.env` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`.
+3. Google Cloud Console → that Web client → Authorized redirect URIs, add:
+   - `http://localhost:8081/oauthredirect`
+   - `http://127.0.0.1:8081/oauthredirect`
+4. Restart with `npx expo start -c`.
+
+On launch and after bind, the app loads `users/{uid}/wordbook` and merges it with local data. Local pending/error rows are kept. A failed cloud write shows **未同步到云** and does not block convert or save.
 
 ## Gemini
 
@@ -76,7 +94,7 @@ One model: `gemini-flash-lite-latest`.
 npx -y firebase-tools@latest deploy --only firestore:rules --project english-study-app-c645a
 ```
 
-These are prototype Security Rules. Please review them before a wide release.
+Locked rules: owner read/write on `users/{uid}` plus `conversions`, `wordbook`, and `practiceSessions`. `dictCache` closed. Quota is on-device (20/80). Do not add extra validation in `firestore.rules`.
 
 ## Typecheck
 

@@ -37,3 +37,15 @@ export async function saveRecents(uid: string, items: Conversion[]): Promise<voi
 export function mergeRecent(list: Conversion[], item: Conversion): Conversion[] {
   return [item, ...list.filter((row) => row.id !== item.id)].slice(0, RECENT_CAP);
 }
+
+/**
+ * Apply a convert result onto local history.
+ * Late ready can replace failed. Ready is never downgraded. Stale retries are ignored.
+ */
+export function applyConvertResult(list: Conversion[], incoming: Conversion): Conversion[] {
+  const current = list.find((item) => item.id === incoming.id);
+  if (!current) return mergeRecent(list, incoming);
+  if (current.clientRequestId !== incoming.clientRequestId) return list;
+  if (current.status === "ready") return list;
+  return mergeRecent(list, incoming);
+}

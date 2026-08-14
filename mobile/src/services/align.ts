@@ -112,6 +112,17 @@ export function ensureTappableTokens(sentence: Pick<Sentence, "id" | "text" | "t
   return tokens;
 }
 
+/** Prefer Gemini sentences; if those are empty, split from outputText so one good rewrite still shows. */
+export function sentencesFromGemini(payload: {
+  outputText: string;
+  sentences: Array<{ text?: unknown; tokens?: unknown }>;
+}): StoredSentence[] {
+  const built = buildSentences(payload.sentences);
+  if (built.length > 0) return built;
+  const fallback = payload.outputText.trim();
+  return fallback ? buildSentences([{ text: fallback }]) : [];
+}
+
 export function buildSentences(raw: Array<{ text?: unknown; tokens?: unknown }>): StoredSentence[] {
   return raw
     .map((row, index) => {

@@ -1,22 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../firebase";
+import { SEOUL_TZ, dailyLimit, seoulDayKey } from "./quotaLimits";
 
-export const ANON_DAILY_QUOTA = 20;
-export const SEOUL_TZ = "Asia/Seoul";
-
-export function seoulDayKey(now = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: SEOUL_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(now);
-}
+export { ANON_DAILY_QUOTA, LINKED_DAILY_QUOTA, SEOUL_TZ, dailyLimit, remainingAnon, remainingToday, seoulDayKey } from "./quotaLimits";
 
 type QuotaState = { convertCountToday: number; convertDayKey: string };
 
 const localKey = (uid: string): string => `didao-quota-v1:${uid}`;
+
+export function isLinkedAccount(user = auth.currentUser): boolean {
+  return Boolean(user && !user.isAnonymous);
+}
 
 function normalize(raw: Partial<QuotaState> | undefined, now: Date): QuotaState {
   const dayKey = seoulDayKey(now);
@@ -46,16 +41,29 @@ async function loadRemote(uid: string, now: Date): Promise<QuotaState> {
   }
 }
 
+const REMOTE_QUOTA_MS = 2_000;
+
+export async function raceWithTimeout<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function currentQuota(uid: string, now = new Date()): Promise<QuotaState> {
-  const [local, remote] = await Promise.all([loadLocal(uid, now), loadRemote(uid, now)]);
+  const local = await loadLocal(uid, now);
+  const remote = await raceWithTimeout(loadRemote(uid, now), REMOTE_QUOTA_MS, local);
   return {
     convertCountToday: Math.max(local.convertCountToday, remote.convertCountToday),
     convertDayKey: seoulDayKey(now)
   };
-}
-
-export function remainingAnon(used: number): number {
-  return Math.max(0, ANON_DAILY_QUOTA - Math.max(0, used));
 }
 
 /** Local successful converts today. No remote query. */
@@ -75,8 +83,8 @@ export function countReadyToday(recents: Array<{ id: string; status: string; cre
 }
 
 export async function checkQuota(uid: string): Promise<"ok" | "quota_exceeded"> {
-  const state = await currentQuota(uid);
-  return state.convertCountToday >= ANON_DAILY_QUOTA ? "quota_exceeded" : "ok";
+  const local = await loadLocal(uid, new Date());
+  return local.convertCountToday >= dailyLimit(isLinkedAccount()) ? "quota_exceeded" : "ok";
 }
 
 export async function incrementQuota(uid: string): Promise<void> {
@@ -87,18 +95,16 @@ export async function incrementQuota(uid: string): Promise<void> {
     convertDayKey: seoulDayKey(now)
   };
   await AsyncStorage.setItem(localKey(uid), JSON.stringify(next));
-  try {
-    await setDoc(
-      doc(db, "users", uid),
-      {
-        quota: next,
-        updatedAt: Timestamp.now(),
-        locale: "zh-CN",
-        timezone: SEOUL_TZ
-      },
-      { merge: true }
-    );
-  } catch {
+  void setDoc(
+    doc(db, "users", uid),
+    {
+      quota: next,
+      updatedAt: Timestamp.now(),
+      locale: "zh-CN",
+      timezone: SEOUL_TZ
+    },
+    { merge: true }
+  ).catch(() => {
     // local counter still applies
-  }
+  });
 }

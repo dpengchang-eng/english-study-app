@@ -1,9 +1,11 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useAuth } from "../context/AuthState";
 import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
-import { countReadyToday, loadLocalSuccessCount, remainingAnon } from "../services/quota";
+import { useGoogleBind } from "../hooks/useGoogleBind";
+import { countReadyToday, loadLocalSuccessCount, remainingToday } from "../services/quota";
 import { colors, space } from "../theme";
 
 function Row({ label, value }: { label: string; value: number }) {
@@ -16,9 +18,12 @@ function Row({ label, value }: { label: string; value: number }) {
 }
 
 export function MeScreen() {
-  const { uid, recents } = useAppState();
+  const { uid, isAnonymous, email } = useAuth();
+  const { online, recents } = useAppState();
   const { items, dueCount } = useWordbook();
   const [stored, setStored] = useState(0);
+  const { busy, error, bindGoogle } = useGoogleBind();
+  const bindDisabled = !online || busy;
 
   useFocusEffect(
     useCallback(() => {
@@ -32,15 +37,34 @@ export function MeScreen() {
     }, [uid])
   );
 
-  const remaining = remainingAnon(Math.max(stored, countReadyToday(recents)));
+  const remaining = remainingToday(Math.max(stored, countReadyToday(recents)), !isAnonymous);
 
   return (
     <View style={styles.page}>
-      <Text style={styles.body}>未绑定</Text>
-      <Text style={styles.muted}>数据只在这台设备</Text>
+      {isAnonymous ? (
+        <>
+          <Text style={styles.body}>未绑定</Text>
+          <Text style={styles.muted}>数据只在这台设备</Text>
+        </>
+      ) : (
+        <>
+          {email ? <Text style={styles.body}>{email}</Text> : null}
+          <Text style={styles.muted}>数据在云端</Text>
+        </>
+      )}
       <Row label="今日剩余转换" value={remaining} />
       <Row label="词本数" value={items.length} />
       <Row label="待复习数" value={dueCount} />
+      {isAnonymous ? (
+        <Pressable
+          style={[styles.btn, bindDisabled ? styles.btnOff : null]}
+          onPress={() => void bindGoogle()}
+          disabled={bindDisabled}
+        >
+          <Text style={styles.btnText}>绑定 Google</Text>
+        </Pressable>
+      ) : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
 }
@@ -61,5 +85,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12
   },
   label: { color: colors.ink, fontSize: 16 },
-  value: { color: colors.ink, fontSize: 16, fontWeight: "700" }
+  value: { color: colors.ink, fontSize: 16, fontWeight: "700" },
+  btn: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 8 },
+  btnOff: { opacity: 0.6 },
+  btnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  error: { color: colors.warn, fontSize: 14, lineHeight: 22 }
 });

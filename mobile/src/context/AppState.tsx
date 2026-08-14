@@ -3,7 +3,7 @@ import NetInfo from "@react-native-community/netinfo";
 import * as Crypto from "expo-crypto";
 import { makeSampleConversion } from "../sample";
 import { convertText, mapConvertOutput } from "../services/convert";
-import { loadRecents, mergeRecent, saveRecents } from "../services/history";
+import { applyConvertResult, loadRecents, mergeRecent, saveRecents } from "../services/history";
 import type { Conversion, ConvertErrorCode, SourceLang, SourceType } from "../types";
 
 type AppStateValue = {
@@ -59,9 +59,7 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
         clientRequestId: options.clientRequestId
       });
       setRecents((prev) => {
-        const current = prev.find((item) => item.id === localId);
-        if (current?.status === "failed") return prev;
-        const next = mergeRecent(
+        const next = applyConvertResult(
           prev,
           mapConvertOutput(output, {
             id: localId,
@@ -71,6 +69,7 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
             createdAt: options.createdAt
           })
         );
+        if (next === prev) return prev;
         void saveRecents(uid, next);
         return next;
       });
@@ -112,12 +111,32 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
     (id: string): string | undefined => {
       const current = recents.find((item) => item.id === id);
       if (!current) return undefined;
-      return startConversion(current.sourceText, {
+      const hint =
+        current.sourceLang === "zh" || current.sourceLang === "en" || current.sourceLang === "mixed"
+          ? current.sourceLang
+          : undefined;
+      const clientRequestId = Crypto.randomUUID();
+      const createdAt = Date.now();
+      const draft: Conversion = {
+        id: current.id,
+        clientRequestId,
         sourceType: current.sourceType,
-        sourceLangHint: current.sourceLang
+        sourceText: current.sourceText,
+        sourceLang: hint,
+        sentences: [],
+        status: "loading",
+        createdAt
+      };
+      upsert(draft);
+      void runConvert(current.id, draft.sourceText, {
+        sourceType: draft.sourceType,
+        sourceLangHint: hint,
+        clientRequestId,
+        createdAt
       });
+      return current.id;
     },
-    [recents, startConversion]
+    [recents, runConvert, upsert]
   );
 
   const failIfLoading = useCallback(

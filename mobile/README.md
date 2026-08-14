@@ -25,44 +25,54 @@ npx expo start
 
 Scan the QR code with Expo Go.
 
+Convert calls the `convertText` Cloud Function (`asia-northeast3`). Deploy functions first (see [functions/README.md](../functions/README.md)). If the function is not deployed yet, tap **加载示例并立刻看结果** to walk play → lookup → wordbook → cloze.
+
 ### Optional env
 
 Copy `.env.example` to `.env`:
 
 | Variable | When you need it |
 | --- | --- |
-| `EXPO_PUBLIC_GEMINI_API_KEY` | Firebase AI Logic is not enabled |
 | `EXPO_PUBLIC_GOOGLE_TTS_KEY` | Cloud Neural2 American English |
+| `EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN` | App Check debug token for Expo |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Bind Google on 我的 (later) |
 
 Do not commit `.env`. Restart with `npx expo start -c` after changes.
 
-If Gemini is not ready, tap **加载示例并立刻看结果**. That still walks play → lookup → add to wordbook → cloze.
+TTS and STT stay on the device. Audio is never uploaded. `audioStatus` is local UI state only.
 
 ## Happy path
 
-1. App signs in anonymously (no prompt).
+1. App signs in anonymously (no prompt). Same uid later binds Google/Apple with `linkWithCredential`.
 2. On **转换**, type a Chinese sentence (max 500 chars) or hold the mic (max 30s, swipe up to cancel). Voice lands in the input box first.
-3. Tap **转换**. The result screen opens immediately.
-4. When sentences appear, tap **播放** (准备中 / 播放 / 停止 / 无音频). Audio can arrive later without refreshing the page.
-5. Tap a word for the half-sheet (IPA + up to 3 Chinese senses + source sentence). Add even if lookup fails.
+3. Tap **转换**. The result screen opens immediately. The client does **not** write conversions.
+4. When sentences appear, tap **播放** (准备中 / 播放 / 停止 / 无音频). Audio can arrive later without remounting the page.
+5. Tap a word for the half-sheet (IPA + up to 3 Chinese senses). Add even if lookup fails.
 6. Long-press to multi-select a phrase, then **加入词本**.
-7. On **词本**, swipe left to delete. **练习到期** or **练习已选** opens the cloze modal.
-8. Type the blank. Correct plays the sentence. Two wrongs reveal. No skip. Recap can retry misses.
-9. **复习** only starts today's due items. Same cloze screen.
-10. **我的**: bind Apple/Google later, quiz size 5/10/15, speech rate, cloud-voice toggle.
+7. On **词本**, swipe left to delete. **练习到期** or **练习已选** opens cloze.
+8. **复习** only starts today's due items.
+9. **我的**: bind later, quiz size, speech rate, cloud-voice. Those last two also write `users/{uid}.settings.ttsRate` / `ttsVoiceHint`.
 
 ## Data
 
-Same Firebase project as the web app: `english-study-app-c645a`.
+Same Firebase project: `english-study-app-c645a`.
+
+Convert v1 (Functions-owned):
 
 ```
-users/{uid}/conversions/{id}     sentences[].tokens[] + audioStatus
+users/{uid}                      settings client-write; quota/stats Functions-only
+users/{uid}/conversions/{id}     client read-only
+users/{uid}/requests/{id}        Functions-only, 24h TTL
+```
+
+Isolated next cut (client-writable, can snap to the backend later):
+
+```
 users/{uid}/wordbook/{id}        dueAt + syncState + blankStart/blankEnd
-users/{uid}/settings/didao
+users/{uid}/settings/didao       quizSize / speechRate / cloudVoice
 ```
 
-Users can only read/write their own data. Publish rules:
+Publish rules:
 
 ```bash
 npx -y firebase-tools@latest deploy --only firestore:rules --project english-study-app-c645a
@@ -72,7 +82,7 @@ These are prototype Security Rules. Please review them before a wide release.
 
 ## Out of v1
 
-Multi-turn rewrite, streaks/leaderboard, push, wordbook folders, multiple-choice, onboarding carousel, tablet, email/password, grammar page.
+Multi-turn rewrite, streaks/leaderboard, push, wordbook folders, multiple-choice, onboarding carousel, tablet, email/password, grammar page, account merge.
 
 ## Typecheck
 

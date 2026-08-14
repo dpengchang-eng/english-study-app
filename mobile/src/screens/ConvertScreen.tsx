@@ -24,6 +24,7 @@ export function ConvertScreen() {
   const [holding, setHolding] = useState(false);
   const [willCancel, setWillCancel] = useState(false);
   const [sttError, setSttError] = useState<string | null>(null);
+  const sourceTypeRef = useRef<"text" | "voice">("text");
   const snapshotRef = useRef("");
   const cancelRef = useRef(false);
   const draftRef = useRef(draft);
@@ -34,7 +35,10 @@ export function ConvertScreen() {
 
   useSpeechEvents({
     onResult: (text) => {
-      if (!cancelRef.current) setDraft(text.slice(0, INPUT_CHAR_CAP));
+      if (!cancelRef.current) {
+        sourceTypeRef.current = "voice";
+        setDraft(text.slice(0, INPUT_CHAR_CAP));
+      }
     },
     onError: (message) => {
       setHolding(false);
@@ -91,7 +95,12 @@ export function ConvertScreen() {
   const convert = (): void => {
     const text = draft.trim();
     if (!text || !online) return;
-    goResult(startConversion(text));
+    goResult(
+      startConversion(text, {
+        sourceType: sourceTypeRef.current,
+        sourceLangHint: lang === "zh-CN" ? "zh" : "en"
+      })
+    );
   };
 
   return (
@@ -100,7 +109,10 @@ export function ConvertScreen() {
       <View style={styles.card}>
         <TextInput
           value={draft}
-          onChangeText={(value) => setDraft(value.slice(0, INPUT_CHAR_CAP))}
+          onChangeText={(value) => {
+            sourceTypeRef.current = "text";
+            setDraft(value.slice(0, INPUT_CHAR_CAP));
+          }}
           placeholder="先打字，或按住麦克风说进去"
           placeholderTextColor={colors.muted}
           multiline
@@ -143,7 +155,7 @@ export function ConvertScreen() {
             goResult(loadSample());
           }}
         >
-          <Text style={styles.sample}>没有模型密钥？加载示例并立刻看结果</Text>
+          <Text style={styles.sample}>函数未部署时，加载示例并立刻看结果</Text>
         </Pressable>
       </View>
 
@@ -162,7 +174,7 @@ export function ConvertScreen() {
             {item.sourceText}
           </Text>
           <Text style={styles.recentOut} numberOfLines={2}>
-            {item.status === "loading" ? "转换中…" : item.rewrittenText || "—"}
+            {item.status === "loading" ? "转换中…" : item.outputText || item.rewrittenText || "—"}
           </Text>
         </Pressable>
       ))}

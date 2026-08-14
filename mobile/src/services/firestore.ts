@@ -11,73 +11,15 @@ import {
   type Unsubscribe
 } from "firebase/firestore";
 import { db } from "../firebase";
-import type { AudioStatus, Conversion, ConversionStatus, ReviewResult, Sentence, Token, WordbookItem } from "../types";
+import type { Conversion, ConversionStatus, ConvertErrorCode, ReviewResult, SourceLang, SourceType, WordbookItem } from "../types";
 import { findBlankSpan, intervalFromResult, nextDueAt } from "./srs";
+import { toUiToken } from "./tokens";
 
 const conversionsPath = (uid: string) => collection(db, "users", uid, "conversions");
 const wordbookPath = (uid: string) => collection(db, "users", uid, "wordbook");
 
-function toAudioStatus(value: unknown): AudioStatus {
-  return value === "ready" || value === "unavailable" ? value : "pending";
-}
-
-function toConversionStatus(value: unknown): ConversionStatus {
-  return value === "error" || value === "loading" ? value : "ready";
-}
-
-function serializeTokens(tokens: Token[]): Array<{ text: string; start: number; end: number; selectable: boolean }> {
-  return tokens.slice(0, 80).map((token) => ({
-    text: token.text.slice(0, 80),
-    start: token.start,
-    end: token.end,
-    selectable: Boolean(token.selectable)
-  }));
-}
-
-function serializeSentences(sentences: Sentence[]) {
-  return sentences.slice(0, 40).map((sentence) => ({
-    text: sentence.text.slice(0, 500),
-    tokens: serializeTokens(sentence.tokens),
-    audioStatus: sentence.audioStatus
-  }));
-}
-
-export async function createConversionDoc(
-  uid: string,
-  conversion: Conversion
-): Promise<string> {
-  const ref = await addDoc(conversionsPath(uid), {
-    sourceText: conversion.sourceText.slice(0, 500),
-    sourceLang: conversion.sourceLang,
-    rewrittenText: (conversion.rewrittenText || " ").slice(0, 4000),
-    status: conversion.status,
-    sentences: serializeSentences(conversion.sentences),
-    createdAt: Timestamp.now()
-  });
-  return ref.id;
-}
-
-export async function updateConversionDoc(
-  uid: string,
-  firestoreId: string,
-  conversion: Conversion
-): Promise<void> {
-  await updateDoc(doc(db, "users", uid, "conversions", firestoreId), {
-    rewrittenText: (conversion.rewrittenText || " ").slice(0, 4000),
-    sourceLang: conversion.sourceLang,
-    status: conversion.status,
-    sentences: serializeSentences(conversion.sentences)
-  });
-}
-
-export async function patchSentenceAudio(
-  uid: string,
-  firestoreId: string,
-  sentences: Sentence[]
-): Promise<void> {
-  await updateDoc(doc(db, "users", uid, "conversions", firestoreId), {
-    sentences: serializeSentences(sentences)
-  });
+function toStatus(value: unknown): ConversionStatus {
+  return value === "failed" || value === "loading" ? value : "ready";
 }
 
 export function subscribeConversions(uid: string, onChange: (items: Conversion[]) => void): Unsubscribe {
@@ -85,28 +27,29 @@ export function subscribeConversions(uid: string, onChange: (items: Conversion[]
   return onSnapshot(q, (snap) => {
     const items = snap.docs.slice(0, 20).map((row) => {
       const data = row.data();
+      const outputText = String(data.outputText ?? data.rewrittenText ?? "");
       const sentences = Array.isArray(data.sentences)
-        ? data.sentences.map((item: Record<string, unknown>) => ({
+        ? data.sentences.map((item: Record<string, unknown>, index: number) => ({
+            id: String(item.id ?? `s${index}`),
+            index: Number(item.index ?? index),
             text: String(item.text ?? ""),
             tokens: Array.isArray(item.tokens)
-              ? item.tokens.map((token: Record<string, unknown>) => ({
-                  text: String(token.text ?? ""),
-                  start: Number(token.start ?? 0),
-                  end: Number(token.end ?? 0),
-                  selectable: token.selectable !== false
-                }))
-              : [],
-            audioStatus: toAudioStatus(item.audioStatus)
+              ? item.tokens.map((token: Record<string, unknown>, tokenIndex: number) => toUiToken(token, tokenIndex))
+              : []
           }))
         : [];
       return {
         id: row.id,
         firestoreId: row.id,
+        clientRequestId: String(data.clientRequestId ?? row.id),
+        sourceType: (data.sourceType === "voice" ? "voice" : "text") as SourceType,
         sourceText: String(data.sourceText ?? ""),
-        sourceLang: (data.sourceLang ?? "zh") as Conversion["sourceLang"],
-        rewrittenText: String(data.rewrittenText ?? ""),
+        sourceLang: (data.sourceLang ?? "unknown") as SourceLang,
+        outputText,
+        rewrittenText: outputText,
         sentences,
-        status: toConversionStatus(data.status),
+        status: toStatus(data.status),
+        errorCode: typeof data.errorCode === "string" ? (data.errorCode as ConvertErrorCode) : undefined,
         createdAt: data.createdAt as Timestamp
       } satisfies Conversion;
     });

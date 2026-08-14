@@ -1,17 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import NetInfo from "@react-native-community/netinfo";
+import * as Crypto from "expo-crypto";
 import { Timestamp } from "firebase/firestore";
 import { SAMPLE_CONVERSION, SAMPLE_INPUT } from "../sample";
-import { convertToAmericanEnglish } from "../services/convert";
-import {
-  addWordbookItem,
-  createConversionDoc,
-  markWordbookReview,
-  patchSentenceAudio,
-  subscribeConversions,
-  subscribeWordbook,
-  updateConversionDoc
-} from "../services/firestore";
+import { convertText, mapConvertOutput } from "../services/convert";
+import { addWordbookItem, markWordbookReview, subscribeConversions, subscribeWordbook } from "../services/firestore";
 import { lookupPhrase } from "../services/lookup";
 import { loadSettings, saveSettings } from "../services/settings";
 import { cacheKey, prepareSentenceAudio } from "../services/tts";
@@ -19,9 +12,12 @@ import { isDue, samePhrase } from "../services/srs";
 import {
   DEFAULT_SETTINGS,
   type AppSettings,
+  type AudioStatus,
   type Conversion,
   type LookupResult,
   type ReviewResult,
+  type SourceLang,
+  type SourceType,
   type WordbookItem
 } from "../types";
 
@@ -31,6 +27,10 @@ type LookupTarget = {
   conversionId: string;
 };
 
+export type ConversionView = Conversion & {
+  sentences: Array<Conversion["sentences"][number] & { audioStatus: AudioStatus }>;
+};
+
 type AppStateValue = {
   uid: string;
   online: boolean;
@@ -38,9 +38,9 @@ type AppStateValue = {
   setSettings: (next: AppSettings) => void;
   wordbook: WordbookItem[];
   dueCount: number;
-  recents: Conversion[];
-  getConversion: (id: string) => Conversion | undefined;
-  startConversion: (text: string) => string;
+  recents: ConversionView[];
+  getConversion: (id: string) => ConversionView | undefined;
+  startConversion: (text: string, options: { sourceType: SourceType; sourceLangHint?: SourceLang }) => string;
   loadSample: () => string;
   retryConversion: (id: string) => void;
   lookup: LookupTarget | null;
@@ -61,12 +61,23 @@ type AppStateValue = {
 
 const AppStateContext = createContext<AppStateValue | null>(null);
 
+function withAudio(conversion: Conversion, audioByKey: Record<string, AudioStatus>): ConversionView {
+  return {
+    ...conversion,
+    sentences: conversion.sentences.map((sentence, index) => ({
+      ...sentence,
+      audioStatus: audioByKey[`${conversion.firestoreId ?? conversion.id}:${sentence.id || index}`] ?? "pending"
+    }))
+  };
+}
+
 export function AppStateProvider({ uid, children }: { uid: string; children: ReactNode }) {
   const [online, setOnline] = useState(true);
   const [settings, setSettingsState] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [wordbook, setWordbook] = useState<WordbookItem[]>([]);
   const [remoteRecents, setRemoteRecents] = useState<Conversion[]>([]);
   const [localMap, setLocalMap] = useState<Record<string, Conversion>>({});
+  const [audioByKey, setAudioByKey] = useState<Record<string, AudioStatus>>({});
   const [lookup, setLookup] = useState<LookupTarget | null>(null);
   const [lookupResult, setLookupResult] = useState<LookupResult | null>(null);
   const [lookupBusy, setLookupBusy] = useState(false);
@@ -103,131 +114,109 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
     });
   }, []);
 
-  const prepareAudio = useCallback(
-    async (conversion: Conversion) => {
-      const opts = {
-        cloudVoice: settingsRef.current.cloudVoice,
-        speechRate: settingsRef.current.speechRate
-      };
-      await Promise.all(
-        conversion.sentences.map(async (sentence, index) => {
-          const status = await prepareSentenceAudio(cacheKey(conversion.id, index), sentence.text, opts);
-          patchLocal(conversion.id, (current) => ({
-            ...current,
-            sentences: current.sentences.map((row, rowIndex) =>
-              rowIndex === index ? { ...row, audioStatus: status } : row
-            )
-          }));
-        })
-      );
-      setLocalMap((prev) => {
-        const latest = prev[conversion.id];
-        if (latest?.firestoreId) {
-          void patchSentenceAudio(uid, latest.firestoreId, latest.sentences);
-        }
-        return prev;
-      });
-    },
-    [patchLocal, uid]
-  );
+  const prepareAudio = useCallback(async (conversion: Conversion) => {
+    const opts = {
+      cloudVoice: settingsRef.current.cloudVoice,
+      speechRate: settingsRef.current.speechRate
+    };
+    const id = conversion.firestoreId ?? conversion.id;
+    await Promise.all(
+      conversion.sentences.map(async (sentence, index) => {
+        const status = await prepareSentenceAudio(cacheKey(id, index), sentence.text, opts);
+        setAudioByKey((prev) => ({ ...prev, [`${id}:${sentence.id || index}`]: status }));
+      })
+    );
+  }, []);
 
   const runConvert = useCallback(
-    async (id: string, text: string) => {
-      try {
-        const payload = await convertToAmericanEnglish(text);
-        let ready: Conversion | undefined;
-        setLocalMap((prev) => {
-          const current = prev[id];
-          if (!current) return prev;
-          ready = {
-            ...current,
-            ...payload,
-            status: "ready",
-            errorMessage: undefined
-          };
-          return { ...prev, [id]: ready };
+    async (
+      localId: string,
+      text: string,
+      options: { sourceType: SourceType; sourceLangHint?: SourceLang; clientRequestId: string }
+    ) => {
+      const output = await convertText({
+        text,
+        sourceType: options.sourceType,
+        sourceLangHint: options.sourceLangHint,
+        clientRequestId: options.clientRequestId
+      });
+      let ready: Conversion | undefined;
+      setLocalMap((prev) => {
+        const current = prev[localId];
+        if (!current) return prev;
+        ready = mapConvertOutput(output, {
+          id: localId,
+          clientRequestId: options.clientRequestId,
+          sourceType: options.sourceType,
+          sourceText: text,
+          createdAt: current.createdAt
         });
-        if (!ready) return;
-        try {
-          if (ready.firestoreId) {
-            await updateConversionDoc(uid, ready.firestoreId, ready);
-          } else {
-            const firestoreId = await createConversionDoc(uid, ready);
-            patchLocal(id, (current) => ({ ...current, firestoreId }));
-          }
-        } catch {
-          // result still usable offline in memory
-        }
+        return { ...prev, [localId]: ready };
+      });
+      if (ready?.status === "ready") {
         void prepareAudio(ready);
-      } catch (error) {
-        patchLocal(id, (current) => ({
-          ...current,
-          status: "error",
-          errorMessage: error instanceof Error ? error.message : "转换失败。"
-        }));
       }
     },
-    [patchLocal, prepareAudio, uid]
+    [prepareAudio]
   );
 
   const startConversion = useCallback(
-    (text: string): string => {
-      const id = `local-${Date.now()}`;
+    (text: string, options: { sourceType: SourceType; sourceLangHint?: SourceLang }): string => {
+      const clientRequestId = Crypto.randomUUID();
       const draft: Conversion = {
-        id,
+        id: clientRequestId,
+        clientRequestId,
+        sourceType: options.sourceType,
         sourceText: text.trim(),
-        sourceLang: "zh",
+        sourceLang: options.sourceLangHint ?? "unknown",
+        outputText: "",
         rewrittenText: "",
         sentences: [],
         status: "loading",
         createdAt: Timestamp.now()
       };
-      setLocalMap((prev) => ({ ...prev, [id]: draft }));
-      void (async () => {
-        try {
-          const firestoreId = await createConversionDoc(uid, draft);
-          patchLocal(id, (current) => ({ ...current, firestoreId }));
-        } catch {
-          // keep local only
-        }
-      })();
-      void runConvert(id, text);
-      return id;
+      setLocalMap((prev) => ({ ...prev, [clientRequestId]: draft }));
+      void runConvert(clientRequestId, text, { ...options, clientRequestId });
+      return clientRequestId;
     },
-    [patchLocal, runConvert, uid]
+    [runConvert]
   );
 
   const loadSample = useCallback((): string => {
     const id = `sample-${Date.now()}`;
-    const draft: Conversion = { ...SAMPLE_CONVERSION, id, sourceText: SAMPLE_INPUT };
+    const draft: Conversion = { ...SAMPLE_CONVERSION, id, clientRequestId: id };
     setLocalMap((prev) => ({ ...prev, [id]: draft }));
-    void (async () => {
-      try {
-        const firestoreId = await createConversionDoc(uid, draft);
-        patchLocal(id, (current) => ({ ...current, firestoreId }));
-      } catch {
-        // keep local
-      }
-      void prepareAudio(draft);
-    })();
+    void prepareAudio(draft);
     return id;
-  }, [patchLocal, prepareAudio, uid]);
+  }, [prepareAudio]);
 
   const retryConversion = useCallback(
     (id: string) => {
       const current = localMap[id];
       if (!current) return;
-      patchLocal(id, (row) => ({ ...row, status: "loading", errorMessage: undefined }));
-      void runConvert(id, current.sourceText);
+      const clientRequestId = Crypto.randomUUID();
+      patchLocal(id, (row) => ({
+        ...row,
+        clientRequestId,
+        status: "loading",
+        errorCode: undefined,
+        errorMessage: undefined
+      }));
+      void runConvert(id, current.sourceText, {
+        sourceType: current.sourceType,
+        sourceLangHint: current.sourceLang,
+        clientRequestId
+      });
     },
     [localMap, patchLocal, runConvert]
   );
 
   const getConversion = useCallback(
-    (id: string): Conversion | undefined => {
-      return localMap[id] ?? remoteRecents.find((item) => item.id === id);
+    (id: string): ConversionView | undefined => {
+      const found = localMap[id] ?? remoteRecents.find((item) => item.id === id || item.clientRequestId === id);
+      return found ? withAudio(found, audioByKey) : undefined;
     },
-    [localMap, remoteRecents]
+    [audioByKey, localMap, remoteRecents]
   );
 
   const recents = useMemo(() => {
@@ -238,8 +227,9 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
     });
     return [...merged.values()]
       .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0))
-      .slice(0, 12);
-  }, [localMap, remoteRecents]);
+      .slice(0, 12)
+      .map((item) => withAudio(item, audioByKey));
+  }, [audioByKey, localMap, remoteRecents]);
 
   const openLookup = useCallback((target: LookupTarget) => {
     setLookup(target);

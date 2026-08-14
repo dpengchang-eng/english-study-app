@@ -1,7 +1,7 @@
 import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 import { firebaseApp } from "../firebase";
 import type { LookupResult } from "../types";
-import { parseJsonFromModel } from "./convert";
+import { parseJsonFromModel } from "./parseJson";
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";

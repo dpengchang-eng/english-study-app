@@ -1,6 +1,8 @@
 import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
+import { initializeAppCheck, CustomProvider } from "firebase/app-check";
 import { getAuth, initializeAuth, type Auth, type Persistence } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 import { getFirestore } from "firebase/firestore";
 
 // Same Firebase web app already used by the GitHub Pages flashcard product.
@@ -35,3 +37,21 @@ function createAuth(): Auth {
 
 export const auth = createAuth();
 export const db = getFirestore(firebaseApp);
+export const functions = getFunctions(firebaseApp, "asia-northeast3");
+
+const appCheckDebugToken = process.env.EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN?.trim();
+if (appCheckDebugToken) {
+  try {
+    initializeAppCheck(firebaseApp, {
+      provider: new CustomProvider({
+        getToken: async () => ({
+          token: appCheckDebugToken,
+          expireTimeMillis: Date.now() + 60 * 60 * 1000
+        })
+      }),
+      isTokenAutoRefreshEnabled: true
+    });
+  } catch {
+    // already initialized
+  }
+}

@@ -5,7 +5,7 @@ import { useAppState } from "../context/AppState";
 import type { ConvertStackParamList } from "../navigation/types";
 import { cacheKey, isPlaying, playPrepared, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
-import type { PlayUiState, Token } from "../types";
+import type { AudioStatus, PlayUiState, Token } from "../types";
 
 type Selected = { sentenceIndex: number; tokenIndex: number };
 
@@ -41,7 +41,7 @@ export function ResultScreen() {
     );
   }
 
-  if (conversion.status === "error") {
+  if (conversion.status === "failed") {
     return (
       <View style={styles.center}>
         <Text style={styles.warn}>{conversion.errorMessage ?? "转换失败。"}</Text>
@@ -74,14 +74,14 @@ export function ResultScreen() {
     });
   };
 
-  const playState = (index: number, audioStatus: PlayUiState): PlayUiState => {
+  const playState = (index: number, audioStatus?: AudioStatus): PlayUiState => {
     if (playing === index) return "playing";
-    return audioStatus;
+    return audioStatus ?? "pending";
   };
 
   const onPlay = async (index: number): Promise<void> => {
     const sentence = conversion.sentences[index];
-    const key = cacheKey(conversion.id, index);
+    const key = cacheKey(conversion.firestoreId ?? conversion.id, index);
     if (playing === index) {
       await stopSpeaking();
       setPlaying(null);
@@ -107,7 +107,7 @@ export function ResultScreen() {
     <View style={styles.flex}>
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={styles.source}>{conversion.sourceText}</Text>
-        <Text style={styles.rewritten}>{conversion.rewrittenText}</Text>
+        <Text style={styles.rewritten}>{conversion.outputText || conversion.rewrittenText}</Text>
         <Text style={styles.hint}>点词查词。长按开始选短语，再勾选要加入词本的词。</Text>
 
         {conversion.sentences.map((sentence, sentenceIndex) => (
@@ -129,7 +129,7 @@ export function ResultScreen() {
                   onPress={() => {
                     if (!token.selectable) return;
                     if (selectMode) toggle(sentenceIndex, tokenIndex);
-                    else openLookup({ phrase: token.text, sentence: sentence.text, conversionId: conversion.id });
+                    else openLookup({ phrase: token.text, sentence: sentence.text, conversionId: conversion.firestoreId ?? conversion.id });
                   }}
                   onLongPress={() => {
                     if (!token.selectable) return;
@@ -161,7 +161,7 @@ export function ResultScreen() {
               void addToWordbook({
                 phrase: phrase.phrase,
                 sentence: phrase.sentence,
-                conversionId: conversion.id
+                conversionId: conversion.firestoreId ?? conversion.id
               });
               setSelectMode(false);
               setSelected([]);

@@ -60,7 +60,7 @@ npm run preview
 
 ## Mobile app (地道)
 
-The Expo app in `mobile/` is a **separate product**. Tabs: 转换 / 词本 / 复习 / 我的. It rewrites Chinese/English into natural American English, then lets you look up words, save a wordbook, and review with cloze.
+The Expo app in `mobile/` is a **separate product**. Tabs: 转换 / 词本 / 复习 / 我的. Convert goes through the locked `convertText` Cloud Function in `functions/`. The web flashcard app is unchanged.
 
 It does **not** replace this flashcard/quiz web app. GitHub Pages still builds from the repo root.
 

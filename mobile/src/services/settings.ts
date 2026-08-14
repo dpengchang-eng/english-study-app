@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { DEFAULT_SETTINGS, type AppSettings, type QuizSize, type SpeechRatePreset } from "../types";
 
@@ -33,6 +33,17 @@ export async function saveSettings(uid: string, settings: AppSettings): Promise<
   await AsyncStorage.setItem(KEY, JSON.stringify(settings));
   try {
     await setDoc(doc(db, "users", uid, "settings", "didao"), settings, { merge: true });
+    await setDoc(
+      doc(db, "users", uid),
+      {
+        settings: {
+          ttsRate: speechRateValue(settings.speechRate),
+          ttsVoiceHint: settings.cloudVoice ? "en-US-Neural2-J" : "device-en-US"
+        },
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
   } catch {
     // local settings still apply
   }

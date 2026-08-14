@@ -60,7 +60,7 @@ npm run preview
 
 ## Mobile app (地道)
 
-The Expo app in `mobile/` is a **separate product**. v1 is convert-only: Home → Result. Convert runs on the phone with Firebase AI Logic (`getAI` + Gemini Developer API). No Cloud Functions and no extra Gemini API key. The web flashcard app is unchanged.
+The Expo app in `mobile/` is a **separate product**. v1 is convert-only: Home → Result. Convert prefers Firebase AI Logic (`getAI` + Gemini Developer API). If that fails, it can use `EXPO_PUBLIC_GEMINI_API_KEY` (the project's dedicated Gemini Developer API key). No Cloud Functions. The web flashcard app is unchanged.
 
 It does **not** replace this flashcard/quiz web app. GitHub Pages still builds from the repo root.
 

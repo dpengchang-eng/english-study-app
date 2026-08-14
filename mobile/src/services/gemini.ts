@@ -5,6 +5,9 @@ import { CONVERT_WAIT_MS } from "../types";
 
 export const GEMINI_MODEL = "gemini-2.0-flash";
 
+/** Leave time for the REST fallback inside the 30s UI wait. */
+const AI_LOGIC_WAIT_MS = 12_000;
+
 const SYSTEM_PROMPT = `You rewrite the user's Chinese or English into authentic, natural American English.
 Keep the meaning. Prefer everyday spoken English: contractions, common idioms, and a natural rhythm.
 Do not sound like a textbook. Do not add extra commentary.
@@ -28,7 +31,9 @@ export type GeminiPayload = {
 
 export type GeminiResult = { ok: true; payload: GeminiPayload } | { ok: false; errorCode: ConvertErrorCode };
 
-/** Gemini Developer API backend. Not Vertex / Agent Platform. */
+function geminiApiKey(): string {
+  return process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim() ?? "";
+}
 
 function parseJson(text: string): unknown {
   const trimmed = text
@@ -85,23 +90,80 @@ function mapThrown(error: unknown): ConvertErrorCode {
   return "gemini_unavailable";
 }
 
-/** Live convert uses Firebase AI Logic + the existing Firebase app. No Gemini API key. */
-export async function rewriteWithGemini(text: string, hint?: SourceLang): Promise<GeminiResult> {
+function shouldFallback(result: GeminiResult): boolean {
+  return !result.ok && (result.errorCode === "gemini_unavailable" || result.errorCode === "gemini_timeout");
+}
+
+/** Preferred: Firebase AI Logic + existing Firebase app. Gemini Developer API, not Vertex. */
+async function callAiLogic(text: string, hint?: SourceLang): Promise<GeminiResult> {
+  const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
+  const model = getGenerativeModel(
+    ai,
+    {
+      model: GEMINI_MODEL,
+      systemInstruction: SYSTEM_PROMPT,
+      generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
+    },
+    { timeout: AI_LOGIC_WAIT_MS }
+  );
+  const result = await model.generateContent(USER_PROMPT(text, hint));
+  const out = result.response.text();
+  if (!out.trim()) return { ok: false, errorCode: "parse_error" };
+  return parseGeminiJson(out);
+}
+
+/** Fallback: dedicated Gemini Developer API key. Never use the Firebase browser key here. */
+async function callRestKey(text: string, apiKey: string, hint?: SourceLang): Promise<GeminiResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CONVERT_WAIT_MS - AI_LOGIC_WAIT_MS);
   try {
-    const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
-    const model = getGenerativeModel(
-      ai,
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
-        model: GEMINI_MODEL,
-        systemInstruction: SYSTEM_PROMPT,
-        generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
-      },
-      { timeout: CONVERT_WAIT_MS }
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [{ role: "user", parts: [{ text: USER_PROMPT(text, hint) }] }],
+          generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
+        })
+      }
     );
-    const result = await model.generateContent(USER_PROMPT(text, hint));
-    const out = result.response.text();
-    if (!out.trim()) return { ok: false, errorCode: "parse_error" };
-    return parseGeminiJson(out);
+    if (response.status === 429 || response.status >= 500) {
+      return { ok: false, errorCode: "gemini_unavailable" };
+    }
+    if (!response.ok) return { ok: false, errorCode: "gemini_unavailable" };
+    const body = (await response.json()) as {
+      candidates?: Array<{ finishReason?: string; content?: { parts?: Array<{ text?: string }> } }>;
+      promptFeedback?: { blockReason?: string };
+    };
+    if (body.promptFeedback?.blockReason || body.candidates?.[0]?.finishReason === "SAFETY") {
+      return { ok: false, errorCode: "safety" };
+    }
+    const textOut = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+    if (!textOut.trim()) return { ok: false, errorCode: "parse_error" };
+    return parseGeminiJson(textOut);
+  } catch (error) {
+    return { ok: false, errorCode: mapThrown(error) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function rewriteWithGemini(text: string, hint?: SourceLang): Promise<GeminiResult> {
+  let first: GeminiResult;
+  try {
+    first = await callAiLogic(text, hint);
+  } catch (error) {
+    first = { ok: false, errorCode: mapThrown(error) };
+  }
+  if (!shouldFallback(first)) return first;
+
+  const key = geminiApiKey();
+  if (!key) return first;
+  try {
+    return await callRestKey(text, key, hint);
   } catch (error) {
     return { ok: false, errorCode: mapThrown(error) };
   }

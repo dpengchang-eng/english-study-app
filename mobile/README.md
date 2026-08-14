@@ -42,19 +42,21 @@ npx expo start
 
 Scan the QR code with Expo Go.
 
-### Gemini (Firebase AI Logic)
+### Gemini (two paths)
 
-Convert calls Gemini from the Expo app through **Firebase AI Logic**. It does **not** call a Cloud Function. It does **not** need `EXPO_PUBLIC_GEMINI_API_KEY`.
+Convert runs on the phone. It does **not** call a Cloud Function. One model: `gemini-2.0-flash`.
 
-The app uses the existing Firebase web config / `apiKey` on project `english-study-app-c645a`:
+**A (preferred):** Firebase AI Logic with the existing Firebase web app:
 
 ```ts
 getAI(app, { backend: new GoogleAIBackend() })
 ```
 
-That is the Gemini Developer API backend, not Vertex. One model: `gemini-2.0-flash`. The Firebase web `apiKey` must allow `generativelanguage.googleapis.com`.
+Gemini Developer API backend, not Vertex. The Firebase browser `apiKey` already allows the Firebase AI Logic API. Google will not let you add `generativelanguage.googleapis.com` on that browser key.
 
-If convert fails locally, tap **没有 Gemini 时，加载示例**.
+**B (fallback):** If AI Logic fails, the app calls Gemini REST with `EXPO_PUBLIC_GEMINI_API_KEY`. Use the project's dedicated **Gemini Developer API key** (Gemini-only). Copy `mobile/.env.example` to `mobile/.env`, paste the key, restart with `npx expo start -c`. Never commit the real key.
+
+If both fail, tap **没有 Gemini 时，加载示例**.
 
 ### App Check debug token (Expo / local)
 

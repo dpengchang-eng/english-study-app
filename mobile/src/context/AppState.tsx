@@ -3,7 +3,8 @@ import NetInfo from "@react-native-community/netinfo";
 import * as Crypto from "expo-crypto";
 import { makeSampleConversion } from "../sample";
 import { convertText, mapConvertOutput } from "../services/convert";
-import { applyConvertResult, loadRecents, mergeRecent, saveRecents } from "../services/history";
+import { applyConversionSync, applyConvertResult, loadRecents, mergeRecent, mergeRemoteRecents, saveRecents } from "../services/history";
+import { loadRemoteConversions } from "../services/persist";
 import type { Conversion, ConvertErrorCode, SourceLang, SourceType } from "../types";
 
 type AppStateValue = {
@@ -19,7 +20,15 @@ type AppStateValue = {
 
 const AppStateContext = createContext<AppStateValue | null>(null);
 
-export function AppStateProvider({ uid, children }: { uid: string; children: ReactNode }) {
+export function AppStateProvider({
+  uid,
+  linked = false,
+  children
+}: {
+  uid: string;
+  linked?: boolean;
+  children: ReactNode;
+}) {
   const [online, setOnline] = useState(true);
   const [recents, setRecents] = useState<Conversion[]>([]);
 
@@ -31,8 +40,23 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
   }, []);
 
   useEffect(() => {
-    void loadRecents(uid).then(setRecents);
-  }, [uid]);
+    let live = true;
+    void loadRecents(uid).then((local) => {
+      if (!live) return;
+      setRecents(local);
+      void loadRemoteConversions(uid).then((remote) => {
+        if (!live || remote.length === 0) return;
+        setRecents((prev) => {
+          const next = mergeRemoteRecents(prev, remote);
+          void saveRecents(uid, next);
+          return next;
+        });
+      });
+    });
+    return () => {
+      live = false;
+    };
+  }, [uid, linked]);
 
   const upsert = useCallback(
     (item: Conversion) => {
@@ -73,6 +97,21 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
         void saveRecents(uid, next);
         return next;
       });
+      if (output.status === "ready") {
+        void (output.persistResult ?? Promise.resolve(undefined)).then((cloudId) => {
+          setRecents((prev) => {
+            const next = applyConversionSync(
+              prev,
+              localId,
+              options.clientRequestId,
+              cloudId ? "synced" : "error"
+            );
+            if (next === prev) return prev;
+            void saveRecents(uid, next);
+            return next;
+          });
+        });
+      }
     },
     [uid]
   );

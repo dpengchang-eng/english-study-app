@@ -116,6 +116,9 @@ export function ResultScreen() {
         />
       ) : null}
       {speakError ? <Text style={styles.speakError}>{speakError}</Text> : null}
+      {conversion.status === "ready" && conversion.syncState === "error" ? (
+        <Text style={styles.speakError}>未同步到云</Text>
+      ) : null}
       {conversion.status === "ready" ? (
         <SentenceList
           sentences={sentences}

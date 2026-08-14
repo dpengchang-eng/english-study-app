@@ -4,9 +4,10 @@ import { db } from "../firebase";
 import type { SrsBox, Token, WordbookItem } from "../types";
 import { offsetsFromTokens, resolveBlankSpan } from "./blank";
 import { slugLemma } from "./slug";
-import { mergeWordbookItems } from "./wordbookMerge";
+import { excludeDeleted, mergeWordbookItems } from "./wordbookMerge";
 
 const localKey = (uid: string): string => `didao-wordbook-v1:${uid}`;
+const deletedKey = (uid: string): string => `didao-wordbook-deleted-v1:${uid}`;
 const FIRESTORE_READ_MS = 8_000;
 
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
@@ -100,6 +101,32 @@ async function writeLocal(uid: string, items: WordbookItem[]): Promise<void> {
   await AsyncStorage.setItem(localKey(uid), JSON.stringify(items));
 }
 
+async function readDeletedIds(uid: string): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(deletedKey(uid));
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string" && Boolean(id)) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeDeletedIds(uid: string, ids: string[]): Promise<void> {
+  await AsyncStorage.setItem(deletedKey(uid), JSON.stringify([...new Set(ids)]));
+}
+
+async function rememberDeleted(uid: string, id: string): Promise<void> {
+  const ids = await readDeletedIds(uid);
+  if (ids.includes(id)) return;
+  await writeDeletedIds(uid, [...ids, id]);
+}
+
+async function forgetDeleted(uid: string, id: string): Promise<void> {
+  const ids = await readDeletedIds(uid);
+  if (!ids.includes(id)) return;
+  await writeDeletedIds(uid, ids.filter((row) => row !== id));
+}
+
 function toFirestore(item: WordbookItem): Record<string, unknown> {
   return {
     phrase: item.phrase.slice(0, 180),
@@ -149,16 +176,17 @@ async function flushPending(uid: string, items: WordbookItem[]): Promise<Wordboo
 
 export async function loadWordbook(uid: string): Promise<WordbookItem[]> {
   const local = await readLocalWordbook(uid);
+  const deleted = await readDeletedIds(uid);
   try {
     const snap = await withTimeout(getDocs(collection(db, "users", uid, "wordbook")), FIRESTORE_READ_MS);
     const remote = snap.docs
       .map((row) => asItem(row.id, row.data() as Record<string, unknown>))
       .filter((item): item is WordbookItem => item !== null);
-    const list = mergeWordbookItems(local, remote);
+    const list = excludeDeleted(mergeWordbookItems(local, remote), deleted);
     await writeLocal(uid, list);
     return flushPending(uid, list);
   } catch {
-    return local;
+    return excludeDeleted(local, deleted);
   }
 }
 
@@ -179,7 +207,8 @@ export async function queryDueWordbook(uid: string, now = Date.now()): Promise<W
     // local merge still runs
   }
   const local = await readLocalWordbook(uid);
-  return mergeWordbookItems(local, remote)
+  const deleted = await readDeletedIds(uid);
+  return excludeDeleted(mergeWordbookItems(local, remote), deleted)
     .filter((item) => item.dueAt <= now)
     .sort((a, b) => a.dueAt - b.dueAt);
 }
@@ -207,6 +236,7 @@ export async function saveToWordbook(
   if (existing) {
     return { items: current, created: false, item: existing };
   }
+  await forgetDeleted(uid, lemmaKey);
   const sentenceText = input.sentenceText.slice(0, 760);
   const span = resolveBlankSpan(sentenceText, phrase, start, end);
   const now = Date.now();
@@ -246,10 +276,11 @@ export async function saveToWordbook(
 export async function deleteFromWordbook(uid: string, items: WordbookItem[], id: string): Promise<WordbookItem[]> {
   const list = items.filter((item) => item.id !== id);
   await writeLocal(uid, list);
+  await rememberDeleted(uid, id);
   try {
     await deleteDoc(doc(db, "users", uid, "wordbook", id));
   } catch {
-    // local delete still applies if Firestore is missing this row
+    // tombstone keeps the row from coming back on the next cloud merge
   }
   return list;
 }
@@ -274,6 +305,8 @@ export async function updateWordbookSrs(uid: string, items: WordbookItem[], next
     await writeLocal(uid, synced);
     return synced;
   } catch {
-    return list;
+    const failed = list.map((item) => (item.id === next.id ? { ...next, syncState: "error" as const } : item));
+    await writeLocal(uid, failed);
+    return failed;
   }
 }

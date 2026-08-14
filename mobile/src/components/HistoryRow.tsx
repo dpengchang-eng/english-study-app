@@ -20,6 +20,7 @@ export function HistoryRow({ item, onPress }: { item: Conversion; onPress: () =>
       <Text style={styles.preview} numberOfLines={2}>
         {preview}
       </Text>
+      {item.syncState === "error" ? <Text style={styles.sync}>未同步到云</Text> : null}
     </Pressable>
   );
 }
@@ -34,5 +35,6 @@ const styles = StyleSheet.create({
     gap: 4
   },
   source: { color: colors.muted, fontSize: 13 },
-  preview: { color: colors.ink, fontSize: 15 }
+  preview: { color: colors.ink, fontSize: 15 },
+  sync: { color: colors.warn, fontSize: 13 }
 });

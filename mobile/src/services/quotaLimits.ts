@@ -19,6 +19,11 @@ export function remainingToday(used: number, linked: boolean): number {
   return Math.max(0, dailyLimit(linked) - Math.max(0, used));
 }
 
+/** Same source of truth for check and increment. Clearing local storage cannot undercount. */
+export function mergeQuotaCounts(localUsed: number, remoteUsed: number): number {
+  return Math.max(Math.max(0, localUsed), Math.max(0, remoteUsed));
+}
+
 /** @deprecated Use remainingToday(used, false) */
 export function remainingAnon(used: number): number {
   return remainingToday(used, false);

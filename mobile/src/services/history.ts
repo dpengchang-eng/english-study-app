@@ -49,3 +49,41 @@ export function applyConvertResult(list: Conversion[], incoming: Conversion): Co
   if (current.status === "ready") return list;
   return mergeRecent(list, incoming);
 }
+
+/** Patch cloud sync on a ready row. Ignores a stale retry. */
+export function applyConversionSync(
+  list: Conversion[],
+  id: string,
+  clientRequestId: string,
+  syncState: "synced" | "error"
+): Conversion[] {
+  const current = list.find((item) => item.id === id);
+  if (!current || current.clientRequestId !== clientRequestId) return list;
+  if (current.status !== "ready") return list;
+  if (current.syncState === syncState) return list;
+  return mergeRecent(list, { ...current, syncState });
+}
+
+/** Cloud rows plus local recents. Do not drop a local loading/ready row or downgrade ready. */
+export function mergeRemoteRecents(local: Conversion[], remote: Conversion[]): Conversion[] {
+  const byId = new Map<string, Conversion>();
+  for (const item of remote) byId.set(item.id, item);
+  for (const item of local) {
+    const existing = byId.get(item.id);
+    if (!existing) {
+      byId.set(item.id, item);
+      continue;
+    }
+    if (item.status === "loading") {
+      byId.set(item.id, item);
+      continue;
+    }
+    if (item.status === "ready") {
+      byId.set(item.id, { ...item, syncState: "synced" });
+      continue;
+    }
+    if (existing.status === "ready") continue;
+    byId.set(item.id, item);
+  }
+  return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, RECENT_CAP);
+}

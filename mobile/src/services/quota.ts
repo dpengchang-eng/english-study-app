@@ -1,9 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
-import { SEOUL_TZ, dailyLimit, seoulDayKey } from "./quotaLimits";
+import { SEOUL_TZ, dailyLimit, mergeQuotaCounts, seoulDayKey } from "./quotaLimits";
 
-export { ANON_DAILY_QUOTA, LINKED_DAILY_QUOTA, SEOUL_TZ, dailyLimit, remainingAnon, remainingToday, seoulDayKey } from "./quotaLimits";
+export { ANON_DAILY_QUOTA, LINKED_DAILY_QUOTA, SEOUL_TZ, dailyLimit, mergeQuotaCounts, remainingAnon, remainingToday, seoulDayKey } from "./quotaLimits";
 
 type QuotaState = { convertCountToday: number; convertDayKey: string };
 
@@ -61,15 +61,15 @@ async function currentQuota(uid: string, now = new Date()): Promise<QuotaState> 
   const local = await loadLocal(uid, now);
   const remote = await raceWithTimeout(loadRemote(uid, now), REMOTE_QUOTA_MS, local);
   return {
-    convertCountToday: Math.max(local.convertCountToday, remote.convertCountToday),
+    convertCountToday: mergeQuotaCounts(local.convertCountToday, remote.convertCountToday),
     convertDayKey: seoulDayKey(now)
   };
 }
 
-/** Local successful converts today. No remote query. */
+/** Successful converts today. Same max(local, remote) as check/increment. */
 export async function loadLocalSuccessCount(uid: string): Promise<number> {
-  const local = await loadLocal(uid, new Date());
-  return local.convertCountToday;
+  const state = await currentQuota(uid);
+  return state.convertCountToday;
 }
 
 export function countReadyToday(recents: Array<{ id: string; status: string; createdAt: number }>): number {
@@ -83,8 +83,8 @@ export function countReadyToday(recents: Array<{ id: string; status: string; cre
 }
 
 export async function checkQuota(uid: string): Promise<"ok" | "quota_exceeded"> {
-  const local = await loadLocal(uid, new Date());
-  return local.convertCountToday >= dailyLimit(isLinkedAccount()) ? "quota_exceeded" : "ok";
+  const state = await currentQuota(uid);
+  return state.convertCountToday >= dailyLimit(isLinkedAccount()) ? "quota_exceeded" : "ok";
 }
 
 export async function incrementQuota(uid: string): Promise<void> {

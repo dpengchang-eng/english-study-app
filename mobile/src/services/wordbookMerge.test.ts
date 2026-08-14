@@ -1,51 +1,58 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { WordbookItem } from "../types";
-import { mergeWordbook } from "./wordbookMerge";
+import { mergeWordbook, mergeWordbookItems } from "./wordbookMerge";
 
-function item(id: string, syncState: WordbookItem["syncState"], dueAt = 1): WordbookItem {
+function item(partial: Partial<WordbookItem> & Pick<WordbookItem, "id" | "phrase">): WordbookItem {
   return {
-    id,
-    phrase: id,
     ipa: "",
     senses: [],
-    sentenceContext: id,
+    sentenceContext: partial.phrase,
     conversionId: "local",
     blankStart: 0,
-    blankEnd: id.length,
+    blankEnd: partial.phrase.length,
     createdAt: 1,
-    dueAt,
+    dueAt: 1,
     box: 0,
     intervalDays: 0,
     lastResult: null,
     reviewCount: 0,
-    syncState
+    syncState: "synced",
+    ...partial
   };
 }
 
-describe("mergeWordbook", () => {
-  it("keeps local pending and error rows when cloud also has that id", () => {
-    const local = [item("dinner", "pending"), item("family", "error")];
-    const remote = [item("dinner", "synced", 9), item("family", "synced", 9)];
-    const merged = mergeWordbook(local, remote);
-    assert.equal(merged.find((row) => row.id === "dinner")?.syncState, "pending");
-    assert.equal(merged.find((row) => row.id === "family")?.syncState, "error");
-  });
-
-  it("keeps local-only pending rows and adds cloud-only rows", () => {
-    const local = [item("local-only", "pending")];
-    const remote = [item("cloud-only", "synced")];
-    const merged = mergeWordbook(local, remote);
+describe("mergeWordbookItems", () => {
+  it("keeps a local unsynced word when remote already has due items", () => {
+    const remote = [item({ id: "dinner", phrase: "dinner", syncState: "synced" })];
+    const local = [item({ id: "grab-coffee", phrase: "grab coffee", syncState: "pending" })];
+    const merged = mergeWordbookItems(local, remote);
     assert.deepEqual(
       merged.map((row) => row.id).sort(),
-      ["cloud-only", "local-only"]
+      ["dinner", "grab-coffee"]
     );
   });
 
-  it("lets cloud win when local is already synced", () => {
-    const local = [item("dinner", "synced", 1)];
-    const remote = [item("dinner", "synced", 9)];
+  it("prefers the local pending row over the same remote id", () => {
+    const remote = [item({ id: "dinner", phrase: "dinner", reviewCount: 0, syncState: "synced", dueAt: 9 })];
+    const local = [item({ id: "dinner", phrase: "dinner", reviewCount: 2, syncState: "pending" })];
+    const merged = mergeWordbookItems(local, remote);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0]?.reviewCount, 2);
+    assert.equal(merged[0]?.syncState, "pending");
+  });
+
+  it("lets cloud win when local is already synced and not ahead", () => {
+    const local = [item({ id: "dinner", phrase: "dinner", syncState: "synced", dueAt: 1 })];
+    const remote = [item({ id: "dinner", phrase: "dinner", syncState: "synced", dueAt: 9 })];
     const merged = mergeWordbook(local, remote);
     assert.equal(merged[0]?.dueAt, 9);
+  });
+
+  it("keeps local error rows", () => {
+    const local = [item({ id: "family", phrase: "family", syncState: "error" })];
+    const remote = [item({ id: "family", phrase: "family", syncState: "synced", dueAt: 9 })];
+    const merged = mergeWordbook(local, remote);
+    assert.equal(merged.find((row) => row.id === "family")?.syncState, "error");
   });
 });

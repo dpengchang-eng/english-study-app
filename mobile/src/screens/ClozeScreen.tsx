@@ -34,15 +34,20 @@ export function ClozeScreen() {
 
   useEffect(() => {
     let live = true;
+    const hang = setTimeout(() => {
+      if (live) setSession((current) => current ?? { sessionId: "local", cards: [] });
+    }, 10_000);
     void createPractice(uid, itemsRef.current)
       .then((next) => {
         if (live) setSession(next);
       })
       .catch(() => {
         if (live) setSession({ sessionId: "local", cards: [] });
-      });
+      })
+      .finally(() => clearTimeout(hang));
     return () => {
       live = false;
+      clearTimeout(hang);
       clearPracticeAnswers();
     };
   }, [uid]);
@@ -79,7 +84,14 @@ export function ClozeScreen() {
     if (!card || revealed || busy) return;
     setBusy(true);
     const nextAttempt = attempt + 1;
-    const { result, items: nextItems } = await submitPractice(uid, items, card.wordbookItemId, draft, nextAttempt);
+    const { result, items: nextItems } = await submitPractice(
+      uid,
+      itemsRef.current,
+      card.wordbookItemId,
+      draft,
+      nextAttempt,
+      session.sessionId
+    );
     syncItems(nextItems);
     setAttempt(nextAttempt);
     if (result.correct) {

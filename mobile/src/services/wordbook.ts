@@ -2,10 +2,28 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, deleteDoc, doc, getDocs, query, setDoc, Timestamp, where, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
 import type { SrsBox, Token, WordbookItem } from "../types";
+import { offsetsFromTokens, resolveBlankSpan } from "./blank";
 import { slugLemma } from "./slug";
-import { mergeWordbook } from "./wordbookMerge";
+import { mergeWordbookItems } from "./wordbookMerge";
 
 const localKey = (uid: string): string => `didao-wordbook-v1:${uid}`;
+const FIRESTORE_READ_MS = 8_000;
+
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("firestore_timeout")), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 
 const BOX_DAYS: Record<SrsBox, 0 | 1 | 3 | 7> = { 0: 0, 1: 1, 2: 3, 3: 7 };
 
@@ -74,9 +92,7 @@ export function phraseFromTokens(tokens: Token[]): { phrase: string; lemmaKey: s
   const words = tokens.filter((token) => token.isWord);
   const phrase = words.map((token) => token.surface).join(" ").trim();
   const lemmaKey = slugLemma(words.map((token) => token.lemma || token.surface).join(" "));
-  const start = words[0]?.charStart ?? 0;
-  const last = words[words.length - 1];
-  const end = last?.charEnd ?? start + phrase.length;
+  const { start, end } = offsetsFromTokens(words);
   return { phrase, lemmaKey, start, end };
 }
 
@@ -103,11 +119,11 @@ function toFirestore(item: WordbookItem): Record<string, unknown> {
   };
 }
 
-async function readLocal(uid: string): Promise<WordbookItem[]> {
+async function readLocalWordbook(uid: string): Promise<WordbookItem[]> {
   try {
     const raw = await AsyncStorage.getItem(localKey(uid));
-    const parsed = raw ? (JSON.parse(raw) as WordbookItem[]) : [];
-    return parsed
+    const local = raw ? (JSON.parse(raw) as WordbookItem[]) : [];
+    return local
       .map((item) => asItem(item.id, item as unknown as Record<string, unknown>) ?? item)
       .filter((item): item is WordbookItem => Boolean(item?.id && item.phrase));
   } catch {
@@ -132,13 +148,13 @@ async function flushPending(uid: string, items: WordbookItem[]): Promise<Wordboo
 }
 
 export async function loadWordbook(uid: string): Promise<WordbookItem[]> {
-  const local = await readLocal(uid);
+  const local = await readLocalWordbook(uid);
   try {
-    const snap = await getDocs(collection(db, "users", uid, "wordbook"));
+    const snap = await withTimeout(getDocs(collection(db, "users", uid, "wordbook")), FIRESTORE_READ_MS);
     const remote = snap.docs
       .map((row) => asItem(row.id, row.data() as Record<string, unknown>))
       .filter((item): item is WordbookItem => item !== null);
-    const list = mergeWordbook(local, remote);
+    const list = mergeWordbookItems(local, remote);
     await writeLocal(uid, list);
     return flushPending(uid, list);
   } catch {
@@ -146,21 +162,26 @@ export async function loadWordbook(uid: string): Promise<WordbookItem[]> {
   }
 }
 
-/** Review query: dueAt <= now, orderBy dueAt. */
+/** Review query: dueAt <= now, orderBy dueAt. Always merge local unsynced rows. */
 export async function queryDueWordbook(uid: string, now = Date.now()): Promise<WordbookItem[]> {
+  let remote: WordbookItem[] = [];
   try {
-    const snap = await getDocs(
-      query(collection(db, "users", uid, "wordbook"), where("dueAt", "<=", Timestamp.fromMillis(now)), orderBy("dueAt"))
+    const snap = await withTimeout(
+      getDocs(
+        query(collection(db, "users", uid, "wordbook"), where("dueAt", "<=", Timestamp.fromMillis(now)), orderBy("dueAt"))
+      ),
+      FIRESTORE_READ_MS
     );
-    const remote = snap.docs
+    remote = snap.docs
       .map((row) => asItem(row.id, row.data() as Record<string, unknown>))
       .filter((item): item is WordbookItem => item !== null);
-    if (remote.length) return remote;
   } catch {
-    // fall back to local
+    // local merge still runs
   }
-  const all = await loadWordbook(uid);
-  return all.filter((item) => item.dueAt <= now).sort((a, b) => a.dueAt - b.dueAt);
+  const local = await readLocalWordbook(uid);
+  return mergeWordbookItems(local, remote)
+    .filter((item) => item.dueAt <= now)
+    .sort((a, b) => a.dueAt - b.dueAt);
 }
 
 export function dueNowCount(items: WordbookItem[], now = Date.now()): number {
@@ -186,16 +207,18 @@ export async function saveToWordbook(
   if (existing) {
     return { items: current, created: false, item: existing };
   }
+  const sentenceText = input.sentenceText.slice(0, 760);
+  const span = resolveBlankSpan(sentenceText, phrase, start, end);
   const now = Date.now();
   const item: WordbookItem = {
     id: lemmaKey,
     phrase: phrase.slice(0, 180),
     ipa: input.ipa.slice(0, 80),
     senses: input.senses.slice(0, 3),
-    sentenceContext: input.sentenceText.slice(0, 760),
+    sentenceContext: sentenceText,
     conversionId: (input.conversionId || "local").slice(0, 80),
-    blankStart: Math.max(0, start),
-    blankEnd: Math.min(760, Math.max(start, end)),
+    blankStart: span.start,
+    blankEnd: span.end,
     createdAt: now,
     dueAt: now,
     box: 0,

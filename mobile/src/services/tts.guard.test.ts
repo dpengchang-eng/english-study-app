@@ -28,7 +28,7 @@ describe("listen tts", () => {
     assert.match(hook, /useFocusEffect/);
     assert.match(hook, /AppState/);
     assert.match(hook, /stopSpeaking/);
-    assert.match(hook, /loopAll/);
+    assert.match(result, /toggle\("loopAll"\)/);
     assert.match(result, /stop\(\);\s*setPicked\(null\);\s*openLookup/s);
     assert.doesNotMatch(result, /这句/);
     assert.doesNotMatch(result, /单句循环/);

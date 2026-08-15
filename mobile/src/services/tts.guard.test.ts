@@ -13,7 +13,7 @@ describe("listen tts", () => {
     assert.doesNotMatch(pkg, /expo-speech-recognition/);
   });
 
-  it("keeps 听全文 | 复读全文 on top and 听 + 循环 on each sentence", () => {
+  it("keeps 听全文 | 复读全文 on top and 单听 + 循环 on each sentence", () => {
     const result = readFileSync(new URL("../screens/ResultScreen.tsx", import.meta.url), "utf8");
     const list = readFileSync(new URL("../components/SentenceList.tsx", import.meta.url), "utf8");
     const hook = readFileSync(new URL("../hooks/useArticleSpeech.ts", import.meta.url), "utf8");
@@ -25,7 +25,8 @@ describe("listen tts", () => {
     assert.match(result, /listenPipe/);
     assert.match(result, /toggle\("loopAll"\)/);
     assert.match(result, /onLoop/);
-    assert.match(list, /听/);
+    assert.match(list, /"停止" : "单听"/);
+    assert.doesNotMatch(list, /"停止" : "听"/);
     assert.match(list, /循环/);
     assert.match(list, /停止/);
     assert.match(list, /playingId/);

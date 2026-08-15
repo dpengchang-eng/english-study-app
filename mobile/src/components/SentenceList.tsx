@@ -81,7 +81,7 @@ export function SentenceList({
                           listenMode === "once" && sentence.id === playingId && styles.playOnText
                         ]}
                       >
-                        {listenMode === "once" && sentence.id === playingId ? "停止" : "听"}
+                        {listenMode === "once" && sentence.id === playingId ? "停止" : "单听"}
                       </Text>
                     </Pressable>
                   ) : null}

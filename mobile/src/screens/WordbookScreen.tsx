@@ -8,7 +8,7 @@ import { MonthCalendar } from "../components/MonthCalendar";
 import { useWordbook } from "../context/WordbookState";
 import type { TabParamList } from "../navigation/types";
 import { dottedDayKeys, dueLabel, itemsOnCalendarDay } from "../services/reviewCalendar";
-import { peekSpeechSpeed } from "../services/speechSpeed";
+import { loadSpeechSpeed } from "../services/speechSpeed";
 import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
 import type { WordbookItem } from "../types";
@@ -51,7 +51,7 @@ export function WordbookScreen() {
     setSelectedDay((current) => (current === dayKey ? null : dayKey));
   };
 
-  const toggleListen = (item: WordbookItem): void => {
+  const toggleListen = async (item: WordbookItem): Promise<void> => {
     if (listeningIdRef.current === item.id) {
       stopListen();
       return;
@@ -60,6 +60,8 @@ export function WordbookScreen() {
     setSpeakError(null);
     listeningIdRef.current = item.id;
     setListeningId(item.id);
+    const speed = await loadSpeechSpeed();
+    if (listeningIdRef.current !== item.id) return;
     speakAmerican(
       item.phrase,
       {
@@ -83,7 +85,7 @@ export function WordbookScreen() {
           }
         }
       },
-      peekSpeechSpeed()
+      speed
     );
   };
 
@@ -115,7 +117,7 @@ export function WordbookScreen() {
             item={item}
             now={now}
             listening={listeningId === item.id}
-            onToggleListen={() => toggleListen(item)}
+            onToggleListen={() => void toggleListen(item)}
           />
         </Swipeable>
       ))}

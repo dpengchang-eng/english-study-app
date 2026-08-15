@@ -67,6 +67,28 @@ describe("speech speed", () => {
     assert.equal(peekSpeechSpeed(), 1);
   });
 
+  it("load-before-speak reads the persisted speed; cold peek is 1x until load", async () => {
+    resetSpeechSpeedCache();
+    const disk = new Map<string, string>([["didao-speech-speed-v1", "0.75"]]);
+    const store = {
+      getItem: async (key: string) => disk.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        disk.set(key, value);
+      }
+    };
+    assert.equal(peekSpeechSpeed(), 1);
+    const speed = await loadSpeechSpeed(store);
+    assert.equal(speed, 0.75);
+    assert.equal(peekSpeechSpeed(), 0.75);
+    resetSpeechSpeedCache();
+    const empty = {
+      getItem: async () => null,
+      setItem: async () => undefined
+    };
+    assert.equal(await loadSpeechSpeed(empty), 1);
+    resetSpeechSpeedCache();
+  });
+
   it("saves the choice and loads it back", async () => {
     resetSpeechSpeedCache();
     const disk = new Map<string, string>();

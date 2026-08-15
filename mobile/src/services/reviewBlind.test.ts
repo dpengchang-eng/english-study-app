@@ -37,35 +37,52 @@ describe("cloze back, reveal, and listen", () => {
 
   it("listens to sentenceContext once at the saved speed and stops on leave", () => {
     assert.match(cloze, /currentItem\?\.sentenceContext/);
+    assert.match(cloze, /const speed = await loadSpeechSpeed\(\)/);
     assert.match(cloze, /speakAmerican\(\s*sentenceContext/);
-    assert.match(cloze, /peekSpeechSpeed\(\)/);
+    assert.match(cloze, /speed/);
     assert.match(cloze, /stopSpeaking/);
     assert.match(cloze, /AppState\.addEventListener/);
     assert.match(cloze, /useFocusEffect/);
     assert.match(cloze, /listening \? "停止" : "听"/);
     assert.match(cloze, /clozeAnswerLine/);
+    assert.doesNotMatch(cloze, /peekSpeechSpeed/);
     assert.doesNotMatch(cloze, /听全文/);
     assert.doesNotMatch(cloze, /复读全文/);
     assert.doesNotMatch(cloze, /语速/);
     assert.doesNotMatch(cloze, /queryDueWordbook/);
-    assert.doesNotMatch(cloze, /loadSpeechSpeed|speechSpeedLabel|restartCurrent/);
+    assert.doesNotMatch(cloze, /speechSpeedLabel|restartCurrent/);
+  });
+
+  it("first wrong keeps 再试一次 and does not leak 中文, phrase, or simpleEn", () => {
+    assert.match(cloze, /nextAttempt === 1/);
+    assert.match(cloze, /setMessage\("再试一次"\)/);
+    assert.doesNotMatch(cloze, /提示：/);
+    assert.doesNotMatch(cloze, /hintGloss/);
+    assert.match(cloze, /currentItem && revealed \? clozeAnswerLine/);
+    const firstWrong = cloze.slice(cloze.indexOf("if (nextAttempt === 1)"), cloze.indexOf("setMissedIds((current)"));
+    assert.match(firstWrong, /再试一次/);
+    assert.doesNotMatch(firstWrong, /clozeAnswerLine/);
+    assert.doesNotMatch(firstWrong, /senses/);
+    assert.doesNotMatch(firstWrong, /simpleEn/);
+    assert.doesNotMatch(firstWrong, /phrase/);
   });
 });
 
 describe("wordbook listen", () => {
   it("still shows phrase, has no cloze entry, and listens to phrase", () => {
     assert.match(wordbook, /item\.phrase/);
+    assert.match(wordbook, /const speed = await loadSpeechSpeed\(\)/);
     assert.match(wordbook, /speakAmerican\(\s*item\.phrase/);
-    assert.match(wordbook, /peekSpeechSpeed\(\)/);
     assert.match(wordbook, /stopSpeaking/);
     assert.match(wordbook, /AppState\.addEventListener/);
     assert.match(wordbook, /useFocusEffect/);
     assert.match(wordbook, /listening \? "停止" : "听"/);
+    assert.doesNotMatch(wordbook, /peekSpeechSpeed/);
     assert.doesNotMatch(wordbook, /openCloze/);
     assert.doesNotMatch(wordbook, /开始填空/);
     assert.doesNotMatch(wordbook, /听全文/);
     assert.doesNotMatch(wordbook, /复读全文/);
     assert.doesNotMatch(wordbook, /语速/);
-    assert.doesNotMatch(wordbook, /loadSpeechSpeed|speechSpeedLabel|restartCurrent/);
+    assert.doesNotMatch(wordbook, /speechSpeedLabel|restartCurrent/);
   });
 });

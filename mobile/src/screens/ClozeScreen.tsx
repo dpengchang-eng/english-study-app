@@ -8,7 +8,7 @@ import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
 import { blankParts, clearPracticeAnswers, clozeAnswerLine, createPractice, type PracticeSession, submitPractice } from "../services/practice";
 import { clozeHydrateKey, pickClozeItems, practiceSourceItems, waitForClozeHydrate } from "../services/reviewCalendar";
-import { peekSpeechSpeed } from "../services/speechSpeed";
+import { loadSpeechSpeed } from "../services/speechSpeed";
 import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
 import type { PracticeCard } from "../types";
@@ -137,7 +137,7 @@ export function ClozeScreen() {
     setIndex((value) => value + 1);
   };
 
-  const toggleListen = (sentenceContext: string): void => {
+  const toggleListen = async (sentenceContext: string): Promise<void> => {
     if (listeningRef.current) {
       stopListen();
       return;
@@ -145,6 +145,8 @@ export function ClozeScreen() {
     if (!sentenceContext.trim()) return;
     setSpeakError(null);
     setListening(true);
+    const speed = await loadSpeechSpeed();
+    if (!listeningRef.current) return;
     speakAmerican(
       sentenceContext,
       {
@@ -155,7 +157,7 @@ export function ClozeScreen() {
         onDone: () => setListening(false),
         onStopped: () => setListening(false)
       },
-      peekSpeechSpeed()
+      speed
     );
   };
 
@@ -205,7 +207,7 @@ export function ClozeScreen() {
       return;
     }
     if (nextAttempt === 1) {
-      setMessage(card.hintGloss ? `提示：${card.hintGloss}` : "再试一次");
+      setMessage("再试一次");
       setBusy(false);
       return;
     }
@@ -287,7 +289,7 @@ export function ClozeScreen() {
         <Text style={styles.kicker}>
           {index + 1}/{session.cards.length}
         </Text>
-        <Pressable onPress={() => toggleListen(sentenceContext)} hitSlop={8}>
+        <Pressable onPress={() => void toggleListen(sentenceContext)} hitSlop={8}>
           <Text style={styles.listen}>{listening ? "停止" : "听"}</Text>
         </Pressable>
       </View>

@@ -2,9 +2,16 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   expoSpeechRate,
+  loadSpeechSpeed,
   nextSpeechSpeed,
   parseSpeechSpeed,
+  peekSpeechSpeed,
+  rememberSpeechSpeed,
+  resetSpeechSpeedCache,
+  saveSpeechSpeed,
+  shouldApplyLoadedSpeed,
   speechSpeedLabel,
+  speedFromStorage,
   SPEECH_SPEEDS
 } from "./speechSpeed";
 
@@ -38,5 +45,62 @@ describe("speech speed", () => {
     assert.equal(speechSpeedLabel(0.75), "语速 0.75x");
     assert.equal(speechSpeedLabel(1.25), "语速 1.25x");
     assert.equal(speechSpeedLabel(1.5), "语速 1.5x");
+  });
+
+  it("restores a saved multiplier and rejects unknown values", () => {
+    assert.equal(speedFromStorage(null), 1);
+    assert.equal(speedFromStorage(""), 1);
+    assert.equal(speedFromStorage("0.75"), 0.75);
+    assert.equal(speedFromStorage("1"), 1);
+    assert.equal(speedFromStorage("1.25"), 1.25);
+    assert.equal(speedFromStorage("1.5"), 1.5);
+    assert.equal(speedFromStorage("2"), 1);
+  });
+
+  it("remembers the last choice in memory so the next screen opens on it", () => {
+    resetSpeechSpeedCache();
+    assert.equal(peekSpeechSpeed(), 1);
+    assert.equal(rememberSpeechSpeed(1.25), 1.25);
+    assert.equal(peekSpeechSpeed(), 1.25);
+    assert.equal(nextSpeechSpeed(peekSpeechSpeed()), 1.5);
+    resetSpeechSpeedCache();
+    assert.equal(peekSpeechSpeed(), 1);
+  });
+
+  it("saves the choice and loads it back", async () => {
+    resetSpeechSpeedCache();
+    const disk = new Map<string, string>();
+    const store = {
+      getItem: async (key: string) => disk.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        disk.set(key, value);
+      }
+    };
+    await saveSpeechSpeed(1.5, store);
+    resetSpeechSpeedCache();
+    assert.equal(await loadSpeechSpeed(store), 1.5);
+    assert.equal(peekSpeechSpeed(), 1.5);
+    resetSpeechSpeedCache();
+  });
+
+  it("ignores a late load after a tap or while speech is playing", () => {
+    assert.equal(shouldApplyLoadedSpeed(true, false), false);
+    assert.equal(shouldApplyLoadedSpeed(false, true), false);
+    assert.equal(shouldApplyLoadedSpeed(true, true), false);
+    assert.equal(shouldApplyLoadedSpeed(false, false), true);
+  });
+
+  it("does not let a late disk read overwrite a tap that already saved", async () => {
+    resetSpeechSpeedCache();
+    const store = {
+      getItem: async () => {
+        rememberSpeechSpeed(1.25);
+        return "0.75";
+      },
+      setItem: async () => undefined
+    };
+    assert.equal(await loadSpeechSpeed(store), 1.25);
+    assert.equal(peekSpeechSpeed(), 1.25);
+    resetSpeechSpeedCache();
   });
 });

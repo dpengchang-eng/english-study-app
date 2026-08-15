@@ -1,109 +1,147 @@
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text } from "react-native";
-import { ComposeCard } from "../components/ComposeCard";
+import * as Clipboard from "expo-clipboard";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { ChatComposer } from "../components/ChatComposer";
+import { ChatTurn } from "../components/ChatTurn";
 import { EmptyHint } from "../components/EmptyHint";
-import { HistoryRow } from "../components/HistoryRow";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { useAppState } from "../context/AppState";
+import { useAuth } from "../context/AuthState";
+import { useHomeArticleListen } from "../hooks/useHomeArticleListen";
 import type { ConvertStackParamList } from "../navigation/types";
-import { isSpeechAvailable, startListening, stopListening, useSpeechEvents } from "../services/stt";
+import {
+  conversationOrder,
+  conversionEnglish,
+  HOME_COPY_TOAST,
+  HOME_EMPTY_HINT,
+  HOME_OFFLINE_BANNER,
+  sendFromComposer
+} from "../services/homeChat";
 import { colors, space } from "../theme";
-import { INPUT_CHAR_CAP, RECORD_MAX_MS, type SourceType } from "../types";
+import { CONVERT_WAIT_MS, INPUT_CHAR_CAP, type Conversion } from "../types";
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<ConvertStackParamList>>();
-  const { online, recents, startConversion, loadSample } = useAppState();
+  const { isAnonymous } = useAuth();
+  const { online, recents, startConversion, convertAgain, failIfLoading } = useAppState();
   const [draft, setDraft] = useState("");
-  const [holding, setHolding] = useState(false);
-  const [sttError, setSttError] = useState<string | null>(null);
-  const sourceTypeRef = useRef<SourceType>("text");
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showMic = isSpeechAvailable();
+  const [toast, setToast] = useState<string | null>(null);
+  const listRef = useRef<FlatList<Conversion>>(null);
+  const inputRef = useRef<TextInput>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const turns = conversationOrder(recents);
+  const { listenId, toggleListen, stopListen } = useHomeArticleListen(recents);
 
-  useSpeechEvents({
-    onResult: (text) => {
-      sourceTypeRef.current = "voice";
-      setDraft(text.slice(0, INPUT_CHAR_CAP));
-    },
-    onError: (message) => {
-      setHolding(false);
-      setSttError(message);
-    },
-    onEnd: () => {
-      setHolding(false);
-    }
-  });
+  const scrollToEnd = useCallback((animated: boolean) => {
+    listRef.current?.scrollToEnd({ animated });
+  }, []);
 
-  const onHoldStart = (): void => {
-    setSttError(null);
-    setHolding(true);
-    void startListening("zh-CN").catch((error: unknown) => {
-      setHolding(false);
-      setSttError(error instanceof Error ? error.message : "请改用打字。");
-    });
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      stopListening();
-      setHolding(false);
-    }, RECORD_MAX_MS);
+  useFocusEffect(
+    useCallback(() => {
+      scrollToEnd(false);
+    }, [scrollToEnd])
+  );
+
+  useEffect(() => {
+    const timers = recents
+      .filter((item) => item.status === "loading")
+      .map((item) => {
+        const left = CONVERT_WAIT_MS - (Date.now() - item.createdAt);
+        return setTimeout(() => failIfLoading(item.id, "gemini_timeout"), Math.max(0, left));
+      });
+    return () => timers.forEach((timer) => clearTimeout(timer));
+  }, [recents, failIfLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  const send = (): void => {
+    const result = sendFromComposer(draft, online, startConversion);
+    if (!result.conversionId) return;
+    setDraft("");
   };
 
-  const onHoldEnd = (): void => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setHolding(false);
-    stopListening();
-  };
-
-  const convert = (): void => {
-    const text = draft.trim();
-    if (!text || !online) return;
-    const id = startConversion(text, { sourceType: sourceTypeRef.current });
+  const openResult = (id: string): void => {
+    stopListen();
     navigation.navigate("Result", { conversionId: id });
   };
 
+  const copyAll = async (item: Conversion): Promise<void> => {
+    const text = conversionEnglish(item);
+    if (!text) return;
+    await Clipboard.setStringAsync(text);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(HOME_COPY_TOAST);
+    toastTimer.current = setTimeout(() => setToast(null), 1600);
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      {!online ? <OfflineBanner /> : null}
-      <Text style={styles.kicker}>输入中文或英文，转成地道美语。</Text>
-      <ComposeCard
-        value={draft}
-        onChangeText={(value) => {
-          sourceTypeRef.current = "text";
-          setDraft(value.slice(0, INPUT_CHAR_CAP));
-        }}
-        onConvert={convert}
-        convertDisabled={!draft.trim() || !online}
-        convertLabel={online ? "转换" : "离线"}
-        holding={holding}
-        onHoldStart={onHoldStart}
-        onHoldEnd={onHoldEnd}
-        sttError={sttError}
-        showMic={showMic}
+    <KeyboardAvoidingView
+      style={styles.page}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+    >
+      {!online ? (
+        <View style={styles.banner}>
+          <OfflineBanner text={HOME_OFFLINE_BANNER} />
+        </View>
+      ) : null}
+      <FlatList
+        ref={listRef}
+        data={turns}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.thread}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => scrollToEnd(true)}
+        ListEmptyComponent={<EmptyHint text={HOME_EMPTY_HINT} />}
+        renderItem={({ item }) => (
+          <ChatTurn
+            item={item}
+            listening={listenId === item.id}
+            isAnonymous={isAnonymous}
+            onOpenResult={() => openResult(item.id)}
+            onCopy={() => void copyAll(item)}
+            onListen={() => toggleListen(item.id)}
+            onRetry={() => {
+              if (!online) return;
+              convertAgain(item.id);
+            }}
+            onFocusInput={() => inputRef.current?.focus()}
+          />
+        )}
       />
-      <Text
-        style={styles.sample}
-        onPress={() => navigation.navigate("Result", { conversionId: loadSample() })}
-      >
-        没有 Gemini 时，加载示例
-      </Text>
-      <Text style={styles.section}>最近</Text>
-      {recents.length === 0 ? <EmptyHint text="转换过的句子会出现在这里。" /> : null}
-      {recents.map((item) => (
-        <HistoryRow
-          key={item.id}
-          item={item}
-          onPress={() => navigation.navigate("Result", { conversionId: item.id })}
-        />
-      ))}
-    </ScrollView>
+      {toast ? (
+        <View style={styles.toast} pointerEvents="none">
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+      <ChatComposer
+        value={draft}
+        onChangeText={(value) => setDraft(value.slice(0, INPUT_CHAR_CAP))}
+        onSend={send}
+        sendDisabled={!draft.trim() || !online}
+        inputRef={inputRef}
+      />
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { padding: space.md, paddingBottom: 40, gap: 12 },
-  kicker: { color: colors.muted, fontSize: 14 },
-  sample: { color: colors.accent, fontSize: 13 },
-  section: { fontSize: 18, fontWeight: "700", color: colors.ink, marginTop: 8 }
+  page: { flex: 1, backgroundColor: colors.bg },
+  banner: { paddingHorizontal: space.md, paddingTop: space.sm },
+  thread: { padding: space.md, paddingBottom: 20, gap: 16, flexGrow: 1 },
+  toast: {
+    alignSelf: "center",
+    backgroundColor: colors.ink,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginBottom: 8
+  },
+  toastText: { color: colors.card, fontWeight: "700", fontSize: 14 }
 });

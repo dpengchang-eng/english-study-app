@@ -1,6 +1,7 @@
 import { geminiLookup } from "./geminiLookup";
 import {
   emptyLookup,
+  lookupCacheKey,
   oneLineSimpleEn,
   shouldRememberLookup,
   type LookupInput,
@@ -8,7 +9,7 @@ import {
 } from "./lookupParse";
 
 export type { LookupInput, LookupResult } from "./lookupParse";
-export { shouldRememberLookup };
+export { lookupCacheKey, shouldRememberLookup };
 
 const LOCAL: Record<string, LookupResult> = {
   coffee: { ipa: "/ˈkɔfi/", senses: ["咖啡", "咖啡豆", "咖啡色"], simpleEn: "Coffee is a hot drink." },
@@ -45,10 +46,10 @@ export async function lookupWord(input: LookupInput): Promise<LookupResult> {
   try {
     const lemma = input.lemma.trim();
     const surface = input.surface.trim();
-    const key = (lemma || surface).toLowerCase();
+    const key = lookupCacheKey({ lemma, surface, sentenceContext: input.sentenceContext });
     const cached = memory.get(key);
     if (cached) return cached;
-    const local = fromLocal(key) ?? fromLocal(surface);
+    const local = fromLocal(surface) ?? fromLocal(lemma);
     if (local) {
       const clipped = clipLookup(local);
       rememberLookup(key, clipped);

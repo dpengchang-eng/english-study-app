@@ -1,11 +1,11 @@
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
 import { ensureTappableTokens } from "../services/align";
-import { lookupForSave, lookupWord, type LookupResult } from "../services/lookup";
+import { lookupWord } from "../services/lookup";
 import {
   firstWordSpan,
   isWholeSentence,
@@ -78,7 +78,6 @@ export function LookupScreen() {
   const [listening, setListening] = useState(false);
   const canPrev = sentenceIndex > 0;
   const canNext = sentenceIndex < sentences.length - 1;
-  const lookupRef = useRef<Promise<LookupResult> | null>(null);
 
   useEffect(() => {
     return () => stopSpeaking();
@@ -99,9 +98,7 @@ export function LookupScreen() {
     setIpa("");
     setSenses([]);
     setSimpleEn("");
-    const pending = lookupWord({ lemma, surface, sentenceContext });
-    lookupRef.current = pending;
-    void pending
+    void lookupWord({ lemma, surface, sentenceContext })
       .then((result) => {
         if (!live) return;
         setIpa(result.ipa);
@@ -157,16 +154,16 @@ export function LookupScreen() {
   };
 
   const save = async (): Promise<void> => {
+    if (loading) return;
     try {
-      const looked = await lookupForSave({ lemma, surface, sentenceContext }, lookupRef.current);
       const result = await savePhrase({
         tokens: selected,
         sentenceTokens: tokens,
         sentenceText: sentenceContext,
         conversionId: route.params.conversionId,
-        ipa: looked.ipa,
-        senses: looked.senses,
-        simpleEn: looked.simpleEn
+        ipa,
+        senses: senses.slice(0, 3),
+        simpleEn
       });
       if (!result.created) {
         setSaved("已在词本");
@@ -219,12 +216,16 @@ export function LookupScreen() {
             </Text>
           ))
         : null}
-      {!loading && simpleEn ? <Text style={styles.simpleEn}>{simpleEn}</Text> : null}
+      {!loading && simpleEn ? (
+        <Text style={styles.simpleEn} numberOfLines={1}>
+          {simpleEn}
+        </Text>
+      ) : null}
       <View style={styles.row}>
         <Pressable style={styles.ghost} onPress={toggleListen}>
           <Text style={styles.ghostText}>听选区</Text>
         </Pressable>
-        <Pressable style={styles.btn} onPress={() => void save()}>
+        <Pressable style={[styles.btn, loading && styles.off]} onPress={() => void save()} disabled={loading}>
           <Text style={styles.btnText}>加入词本</Text>
         </Pressable>
       </View>
@@ -254,6 +255,7 @@ const styles = StyleSheet.create({
   simpleEn: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   row: { flexDirection: "row", gap: 8, marginTop: 8 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  off: { opacity: 0.45 },
   btnText: { color: "#fff", fontWeight: "700" },
   ghost: { backgroundColor: colors.accentSoft, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
   ghostText: { color: colors.ink, fontWeight: "700" },

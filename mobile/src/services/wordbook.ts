@@ -3,14 +3,15 @@ import { collection, deleteDoc, doc, getDocs, query, setDoc, Timestamp, where, o
 import { db } from "../firebase";
 import { PHRASE_MAX, SENTENCE_CONTEXT_MAX, type SrsBox, type Token, type WordbookItem } from "../types";
 import { mergeWordbookItems } from "./wordbookMerge";
-import { wordbookDraftFromSelection } from "./wordbookSelect";
+import { fillEmptyWordbookGloss, wordbookDraftFromSelection } from "./wordbookSelect";
 
 export {
   consecutiveTokenSpan,
   EMPTY_SELECTION,
   phraseFromTokens,
   selectWordTokens,
-  wordbookDraftFromSelection
+  wordbookDraftFromSelection,
+  fillEmptyWordbookGloss
 } from "./wordbookSelect";
 
 const localKey = (uid: string): string => `didao-wordbook-v1:${uid}`;
@@ -186,7 +187,29 @@ export async function saveToWordbook(
   const draft = wordbookDraftFromSelection(input);
   const existing = current.find((item) => item.id === draft.lemmaKey);
   if (existing) {
-    return { items: current, created: false, item: existing };
+    const filled = fillEmptyWordbookGloss(existing, draft);
+    if (!filled) return { items: current, created: false, item: existing };
+    const item: WordbookItem = { ...existing, ...filled };
+    const items = current.map((row) => (row.id === item.id ? item : row));
+    await writeLocal(uid, items);
+    try {
+      await setDoc(
+        doc(db, "users", uid, "wordbook", item.id),
+        {
+          ipa: item.ipa.slice(0, 80),
+          senses: item.senses.slice(0, 3),
+          simpleEn: item.simpleEn.slice(0, SENTENCE_CONTEXT_MAX)
+        },
+        { merge: true }
+      );
+      const synced = items.map((row) => (row.id === item.id ? { ...item, syncState: "synced" as const } : row));
+      await writeLocal(uid, synced);
+      return { items: synced, created: false, item: synced.find((row) => row.id === item.id) ?? item };
+    } catch {
+      const failed = items.map((row) => (row.id === item.id ? { ...item, syncState: "error" as const } : row));
+      await writeLocal(uid, failed);
+      return { items: failed, created: false, item: failed.find((row) => row.id === item.id) ?? item };
+    }
   }
   const now = Date.now();
   const item: WordbookItem = {

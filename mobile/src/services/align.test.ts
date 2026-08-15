@@ -35,6 +35,20 @@ describe("ensureTappableTokens", () => {
     assert.equal(tokens[2]?.isWord, false);
   });
 
+  it("realigns when words exist but char offsets are missing", () => {
+    const tokens = ensureTappableTokens({
+      id: "s0",
+      text: dinner,
+      tokens: [
+        { id: "s0_t0", lemma: "dinner", surface: "dinner", isWord: true },
+        { id: "s0_t1", lemma: "family", surface: "family", isWord: true }
+      ]
+    });
+    const dinnerToken = tokens.find((token) => token.surface === "dinner");
+    assert.ok(dinnerToken);
+    assert.equal(dinner.slice(dinnerToken.charStart ?? -1, dinnerToken.charEnd ?? -1), "dinner");
+  });
+
   it("retokenizes when no token is a word", () => {
     const tokens = ensureTappableTokens({
       id: "s0",

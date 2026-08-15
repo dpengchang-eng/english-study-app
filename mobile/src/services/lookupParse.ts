@@ -14,14 +14,22 @@ export function emptyLookup(): LookupResult {
   return { ipa: "", senses: [], simpleEn: "" };
 }
 
-/** One line only. Extra lines from the model are dropped. */
+/** Fold whitespace so simpleEn is one line. */
 export function oneLineSimpleEn(text: string): string {
-  return text.trim().split(/\r?\n/, 1)[0]?.trim() ?? "";
+  return text.trim().replace(/\s+/g, " ");
 }
 
 /** Empty ipa/senses/simpleEn is a failed or blank lookup — do not keep it in memory. */
 export function shouldRememberLookup(result: LookupResult): boolean {
   return Boolean(result.ipa || result.senses.length > 0 || result.simpleEn);
+}
+
+/** Same lemma in another sentence is a different lookup. */
+export function lookupCacheKey(input: LookupInput): string {
+  const lemma = input.lemma.trim().toLowerCase();
+  const surface = input.surface.trim().toLowerCase();
+  const sentence = input.sentenceContext.trim().toLowerCase();
+  return `${surface || lemma}\n${sentence}`;
 }
 
 export function asLookup(raw: unknown): LookupResult {

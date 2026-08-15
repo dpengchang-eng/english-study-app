@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { lookupForSave, shouldRememberLookup } from "./lookup";
-import { asLookup, emptyLookup, oneLineSimpleEn } from "./lookupParse";
+import { asLookup, emptyLookup, lookupCacheKey, oneLineSimpleEn } from "./lookupParse";
 
 describe("lookupWord / geminiLookup result", () => {
   it("returns ipa, up to 3 Chinese senses, and simpleEn", () => {
@@ -16,8 +16,23 @@ describe("lookupWord / geminiLookup result", () => {
   });
 
   it("pins simpleEn to one line", () => {
-    assert.equal(oneLineSimpleEn("Coffee is a hot drink.\nIt is brown."), "Coffee is a hot drink.");
-    assert.equal(asLookup({ ipa: "", senses: ["咖啡"], simpleEn: "One line.\nTwo." }).simpleEn, "One line.");
+    assert.equal(oneLineSimpleEn("Coffee is a hot drink.\nIt is brown."), "Coffee is a hot drink. It is brown.");
+    assert.equal(asLookup({ ipa: "", senses: ["咖啡"], simpleEn: "One line.\nTwo." }).simpleEn, "One line. Two.");
+  });
+
+  it("keys the lookup cache by surface and sentenceContext", () => {
+    const coffeeHere = lookupCacheKey({
+      lemma: "coffee",
+      surface: "coffee",
+      sentenceContext: "I like coffee."
+    });
+    const coffeeThere = lookupCacheKey({
+      lemma: "coffee",
+      surface: "coffee",
+      sentenceContext: "Grab coffee later."
+    });
+    assert.match(coffeeHere, /i like coffee\./);
+    assert.notEqual(coffeeHere, coffeeThere);
   });
 
   it("does not remember a failed empty lookup", () => {
@@ -46,7 +61,7 @@ describe("lookupWord / geminiLookup result", () => {
     );
     assert.equal(result.ipa, "/ˈkɔfi/");
     assert.deepEqual(result.senses, ["咖啡"]);
-    assert.equal(result.simpleEn, "Coffee is a hot drink.");
+    assert.equal(result.simpleEn, "Coffee is a hot drink. More.");
   });
 
   it("lookupForSave still returns empty fields when lookup fails", async () => {

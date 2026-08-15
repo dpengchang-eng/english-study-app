@@ -1,6 +1,15 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { resolveErrorCode } from "../services/convertError";
-import { conversionEnglish, HOME_COPY_ACTION, HOME_LISTEN_ACTION } from "../services/homeChat";
+import {
+  conversionEnglish,
+  failedTurnShowsQuotaHint,
+  failedTurnShowsRetry,
+  HOME_COPY_ACTION,
+  HOME_LISTEN_ACTION,
+  HOME_LOADING_TEXT,
+  HOME_QUOTA_BIND_HINT,
+  HOME_RETRY_ACTION
+} from "../services/homeChat";
 import type { Conversion } from "../types";
 import { ERROR_COPY } from "../types";
 import { colors } from "../theme";
@@ -8,21 +17,21 @@ import { colors } from "../theme";
 export function ChatTurn({
   item,
   listening,
-  copied,
   isAnonymous,
   onOpenResult,
   onCopy,
   onListen,
-  onRetry
+  onRetry,
+  onFocusInput
 }: {
   item: Conversion;
   listening: boolean;
-  copied: boolean;
   isAnonymous: boolean;
   onOpenResult: () => void;
   onCopy: () => void;
   onListen: () => void;
   onRetry: () => void;
+  onFocusInput: () => void;
 }) {
   const english = conversionEnglish(item);
   const errorText = item.status === "failed" ? ERROR_COPY[resolveErrorCode(item.errorCode)] : null;
@@ -37,7 +46,7 @@ export function ChatTurn({
       {item.status === "loading" ? (
         <View style={styles.appWrap}>
           <View style={styles.appBubble}>
-            <Text style={styles.loading}>转换中…</Text>
+            <Text style={styles.loading}>{HOME_LOADING_TEXT}</Text>
           </View>
         </View>
       ) : null}
@@ -45,12 +54,16 @@ export function ChatTurn({
         <View style={styles.appWrap}>
           <View style={styles.appBubble}>
             <Text style={styles.error}>{errorText}</Text>
-            {item.errorCode === "quota_exceeded" && isAnonymous ? (
-              <Text style={styles.hint}>绑定后每天 80 次</Text>
+            {failedTurnShowsQuotaHint(item.errorCode, isAnonymous) ? (
+              <Pressable onPress={onFocusInput} hitSlop={8}>
+                <Text style={styles.retry}>{HOME_QUOTA_BIND_HINT}</Text>
+              </Pressable>
             ) : null}
-            <Pressable onPress={onRetry} hitSlop={8}>
-              <Text style={styles.retry}>再试一次</Text>
-            </Pressable>
+            {failedTurnShowsRetry(item.errorCode) ? (
+              <Pressable onPress={onRetry} hitSlop={8}>
+                <Text style={styles.retry}>{HOME_RETRY_ACTION}</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       ) : null}
@@ -66,9 +79,8 @@ export function ChatTurn({
                 }}
                 hitSlop={8}
               >
-                <Text style={styles.action}>{copied ? "已复制" : HOME_COPY_ACTION}</Text>
+                <Text style={styles.action}>{HOME_COPY_ACTION}</Text>
               </Pressable>
-              <Text style={styles.pipe}>|</Text>
               <Pressable
                 onPress={(event) => {
                   event.stopPropagation?.();
@@ -114,11 +126,9 @@ const styles = StyleSheet.create({
   },
   loading: { color: colors.muted, fontSize: 15 },
   error: { color: colors.warn, fontSize: 15, lineHeight: 22 },
-  hint: { color: colors.ink, fontSize: 14 },
   retry: { color: colors.accent, fontWeight: "700", fontSize: 15 },
   english: { color: colors.ink, fontSize: 16, lineHeight: 24 },
-  actions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 16 },
   action: { color: colors.ink, fontWeight: "700", fontSize: 15 },
-  actionOn: { color: colors.accent, fontWeight: "700", fontSize: 15 },
-  pipe: { color: colors.muted, fontSize: 15 }
+  actionOn: { color: colors.accent, fontWeight: "700", fontSize: 15 }
 });

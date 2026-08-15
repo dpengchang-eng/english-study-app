@@ -1,10 +1,10 @@
 import { StyleSheet, Text, View } from "react-native";
 import { colors, space } from "../theme";
 
-export function OfflineBanner() {
+export function OfflineBanner({ text }: { text: string }) {
   return (
     <View style={styles.banner}>
-      <Text style={styles.text}>现在离线，不能转换。文字可以先留在输入框。</Text>
+      <Text style={styles.text}>{text}</Text>
     </View>
   );
 }

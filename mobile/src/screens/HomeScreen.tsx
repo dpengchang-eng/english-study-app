@@ -1,8 +1,8 @@
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Clipboard from "expo-clipboard";
-import { useEffect, useRef, useState } from "react";
-import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import { ChatComposer } from "../components/ChatComposer";
 import { ChatTurn } from "../components/ChatTurn";
 import { EmptyHint } from "../components/EmptyHint";
@@ -11,8 +11,14 @@ import { useAppState } from "../context/AppState";
 import { useAuth } from "../context/AuthState";
 import { useHomeArticleListen } from "../hooks/useHomeArticleListen";
 import type { ConvertStackParamList } from "../navigation/types";
-import { conversationOrder, conversionEnglish, sendFromComposer } from "../services/homeChat";
-import { SPEAK_FAIL_TEXT } from "../services/tts";
+import {
+  conversationOrder,
+  conversionEnglish,
+  HOME_COPY_TOAST,
+  HOME_EMPTY_HINT,
+  HOME_OFFLINE_BANNER,
+  sendFromComposer
+} from "../services/homeChat";
 import { colors, space } from "../theme";
 import { CONVERT_WAIT_MS, INPUT_CHAR_CAP, type Conversion } from "../types";
 
@@ -21,12 +27,21 @@ export function HomeScreen() {
   const { isAnonymous } = useAuth();
   const { online, recents, startConversion, convertAgain, failIfLoading } = useAppState();
   const [draft, setDraft] = useState("");
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [speakError, setSpeakError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const listRef = useRef<FlatList<Conversion>>(null);
+  const inputRef = useRef<TextInput>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const turns = conversationOrder(recents);
-  const { listenId, toggleListen, stopListen } = useHomeArticleListen(recents, () =>
-    setSpeakError(SPEAK_FAIL_TEXT)
+  const { listenId, toggleListen, stopListen } = useHomeArticleListen(recents);
+
+  const scrollToEnd = useCallback((animated: boolean) => {
+    listRef.current?.scrollToEnd({ animated });
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      scrollToEnd(false);
+    }, [scrollToEnd])
   );
 
   useEffect(() => {
@@ -38,6 +53,12 @@ export function HomeScreen() {
       });
     return () => timers.forEach((timer) => clearTimeout(timer));
   }, [recents, failIfLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   const send = (): void => {
     const result = sendFromComposer(draft, online, startConversion);
@@ -54,7 +75,9 @@ export function HomeScreen() {
     const text = conversionEnglish(item);
     if (!text) return;
     await Clipboard.setStringAsync(text);
-    setCopiedId(item.id);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(HOME_COPY_TOAST);
+    toastTimer.current = setTimeout(() => setToast(null), 1600);
   };
 
   return (
@@ -65,7 +88,7 @@ export function HomeScreen() {
     >
       {!online ? (
         <View style={styles.banner}>
-          <OfflineBanner />
+          <OfflineBanner text={HOME_OFFLINE_BANNER} />
         </View>
       ) : null}
       <FlatList
@@ -74,34 +97,35 @@ export function HomeScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.thread}
         keyboardShouldPersistTaps="handled"
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-        ListEmptyComponent={<EmptyHint text="输入中文或英文，点发送。" />}
+        onContentSizeChange={() => scrollToEnd(true)}
+        ListEmptyComponent={<EmptyHint text={HOME_EMPTY_HINT} />}
         renderItem={({ item }) => (
           <ChatTurn
             item={item}
             listening={listenId === item.id}
-            copied={copiedId === item.id}
             isAnonymous={isAnonymous}
             onOpenResult={() => openResult(item.id)}
             onCopy={() => void copyAll(item)}
-            onListen={() => {
-              setSpeakError(null);
-              toggleListen(item.id);
-            }}
+            onListen={() => toggleListen(item.id)}
             onRetry={() => {
               if (!online) return;
               convertAgain(item.id);
             }}
+            onFocusInput={() => inputRef.current?.focus()}
           />
         )}
       />
-      {speakError ? <Text style={styles.speakError}>{speakError}</Text> : null}
+      {toast ? (
+        <View style={styles.toast} pointerEvents="none">
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      ) : null}
       <ChatComposer
         value={draft}
         onChangeText={(value) => setDraft(value.slice(0, INPUT_CHAR_CAP))}
         onSend={send}
         sendDisabled={!draft.trim() || !online}
-        sendLabel={online ? "发送" : "离线"}
+        inputRef={inputRef}
       />
     </KeyboardAvoidingView>
   );
@@ -111,5 +135,13 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.bg },
   banner: { paddingHorizontal: space.md, paddingTop: space.sm },
   thread: { padding: space.md, paddingBottom: 20, gap: 16, flexGrow: 1 },
-  speakError: { color: colors.warn, fontSize: 13, paddingHorizontal: space.md, paddingBottom: 6 }
+  toast: {
+    alignSelf: "center",
+    backgroundColor: colors.ink,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginBottom: 8
+  },
+  toastText: { color: colors.card, fontWeight: "700", fontSize: 14 }
 });

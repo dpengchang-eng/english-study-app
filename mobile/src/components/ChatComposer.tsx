@@ -1,4 +1,6 @@
+import type { Ref } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { HOME_INPUT_PLACEHOLDER, HOME_SEND_ACTION } from "../services/homeChat";
 import { colors, space } from "../theme";
 import { INPUT_CHAR_CAP } from "../types";
 
@@ -7,32 +9,28 @@ export function ChatComposer({
   onChangeText,
   onSend,
   sendDisabled,
-  sendLabel
+  inputRef
 }: {
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
   sendDisabled: boolean;
-  sendLabel: string;
+  inputRef?: Ref<TextInput>;
 }) {
   return (
     <View style={styles.bar}>
-      <View style={styles.field}>
-        <TextInput
-          value={value}
-          onChangeText={onChangeText}
-          placeholder="输入中文或英文"
-          placeholderTextColor={colors.muted}
-          multiline
-          maxLength={INPUT_CHAR_CAP}
-          style={styles.box}
-        />
-        <Text style={styles.counter}>
-          {value.length}/{INPUT_CHAR_CAP}
-        </Text>
-      </View>
+      <TextInput
+        ref={inputRef}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={HOME_INPUT_PLACEHOLDER}
+        placeholderTextColor={colors.muted}
+        multiline
+        maxLength={INPUT_CHAR_CAP}
+        style={styles.box}
+      />
       <Pressable style={[styles.send, sendDisabled && styles.sendOff]} onPress={onSend} disabled={sendDisabled}>
-        <Text style={styles.sendText}>{sendLabel}</Text>
+        <Text style={styles.sendText}>{HOME_SEND_ACTION}</Text>
       </Pressable>
     </View>
   );
@@ -50,24 +48,20 @@ const styles = StyleSheet.create({
     borderTopColor: colors.line,
     backgroundColor: colors.bg
   },
-  field: {
+  box: {
     flex: 1,
+    minHeight: 40,
+    maxHeight: 120,
+    fontSize: 16,
+    color: colors.ink,
+    textAlignVertical: "top",
     backgroundColor: colors.card,
     borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 16,
     paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 6
+    paddingVertical: 10
   },
-  box: {
-    minHeight: 40,
-    maxHeight: 120,
-    fontSize: 16,
-    color: colors.ink,
-    textAlignVertical: "top"
-  },
-  counter: { alignSelf: "flex-end", color: colors.muted, fontSize: 11 },
   send: {
     backgroundColor: colors.accent,
     borderRadius: 12,

@@ -2,12 +2,23 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { Conversion } from "../types";
+import { ERROR_COPY } from "../types";
 import {
   conversationOrder,
   conversionEnglish,
   conversionSpeakable,
+  failedTurnShowsQuotaHint,
+  failedTurnShowsRetry,
   HOME_COPY_ACTION,
+  HOME_COPY_TOAST,
+  HOME_EMPTY_HINT,
+  HOME_INPUT_PLACEHOLDER,
   HOME_LISTEN_ACTION,
+  HOME_LOADING_TEXT,
+  HOME_OFFLINE_BANNER,
+  HOME_QUOTA_BIND_HINT,
+  HOME_RETRY_ACTION,
+  HOME_SEND_ACTION,
   sendFromComposer,
   shouldOpenResultOnPress
 } from "./homeChat";
@@ -70,7 +81,7 @@ describe("conversionSpeakable", () => {
       ]
     });
     assert.deepEqual(
-      conversionSpeakable(item).map((row) => row.id),
+      conversionSpeakable(item).map((line) => line.id),
       ["s0", "s2"]
     );
     const fallback = row({ id: "b", status: "ready", createdAt: 2, outputText: "Hello." });
@@ -110,13 +121,28 @@ describe("home bubble actions", () => {
     assert.equal(shouldOpenResultOnPress("send"), false);
     assert.equal(HOME_COPY_ACTION, "复制全文");
     assert.equal(HOME_LISTEN_ACTION, "听");
+    assert.equal(HOME_SEND_ACTION, "发送");
+    assert.equal(HOME_RETRY_ACTION, "重试");
+    assert.equal(HOME_COPY_TOAST, "已复制");
+  });
+
+  it("keeps existing error copy and only retries when it is not quota", () => {
+    assert.equal(ERROR_COPY.quota_exceeded, "今天的转换次数用完了");
+    assert.equal(HOME_QUOTA_BIND_HINT, "绑定后每天 80 次");
+    assert.equal(failedTurnShowsRetry("gemini_timeout"), true);
+    assert.equal(failedTurnShowsRetry("parse_error"), true);
+    assert.equal(failedTurnShowsRetry("quota_exceeded"), false);
+    assert.equal(failedTurnShowsQuotaHint("quota_exceeded", true), true);
+    assert.equal(failedTurnShowsQuotaHint("quota_exceeded", false), false);
+    assert.equal(failedTurnShowsQuotaHint("parse_error", true), false);
   });
 });
 
 describe("Home conversation window", () => {
-  it("no longer auto-navigates on convert and keeps copy/listen on the reply", () => {
+  it("no longer auto-navigates on convert and keeps locked chat copy", () => {
     const home = readFileSync(new URL("../screens/HomeScreen.tsx", import.meta.url), "utf8");
     const turn = readFileSync(new URL("../components/ChatTurn.tsx", import.meta.url), "utf8");
+    const composer = readFileSync(new URL("../components/ChatComposer.tsx", import.meta.url), "utf8");
     const helpers = readFileSync(new URL("./homeChat.ts", import.meta.url), "utf8");
     const sendFn = home.match(/const send = \(\): void => \{[\s\S]*?\n  \};/)?.[0] ?? "";
     assert.match(home, /sendFromComposer/);
@@ -125,14 +151,34 @@ describe("Home conversation window", () => {
     assert.doesNotMatch(sendFn, /navigate/);
     assert.match(home, /openResult/);
     assert.match(home, /onOpenResult=\{\(\) => openResult/);
-    assert.match(helpers, /复制全文/);
-    assert.match(helpers, /"听"/);
+    assert.match(home, /HOME_COPY_TOAST/);
+    assert.match(home, /useFocusEffect/);
+    assert.match(home, /scrollToEnd/);
+    assert.match(helpers, /先说一句你想怎么讲，比如“这个周末有空吗”/);
+    assert.match(helpers, /说中文或英文，转成地道的美式说法/);
+    assert.match(helpers, /没有网，没法转换/);
+    assert.match(helpers, /正在改成更地道的说法…/);
+    assert.match(composer, /HOME_INPUT_PLACEHOLDER/);
+    assert.match(composer, /HOME_SEND_ACTION/);
+    assert.match(composer, /multiline/);
+    assert.doesNotMatch(composer, /showMic|MicButton|startListening/);
     assert.match(turn, /HOME_COPY_ACTION/);
     assert.match(turn, /HOME_LISTEN_ACTION/);
+    assert.match(turn, /HOME_LOADING_TEXT/);
+    assert.match(turn, /HOME_RETRY_ACTION/);
+    assert.match(turn, /onFocusInput/);
+    assert.doesNotMatch(turn, /已复制/);
+    assert.doesNotMatch(turn, /再试一次/);
+    assert.doesNotMatch(turn, /转换中/);
+    assert.doesNotMatch(turn, /复读|单听|点词/);
     assert.doesNotMatch(home, /最近/);
     assert.doesNotMatch(home, /ComposeCard/);
     assert.doesNotMatch(home, /showMic/);
     assert.doesNotMatch(home, /loadSample/);
     assert.doesNotMatch(home, /startListening/);
+    assert.equal(HOME_EMPTY_HINT, "先说一句你想怎么讲，比如“这个周末有空吗”");
+    assert.equal(HOME_INPUT_PLACEHOLDER, "说中文或英文，转成地道的美式说法");
+    assert.equal(HOME_OFFLINE_BANNER, "没有网，没法转换");
+    assert.equal(HOME_LOADING_TEXT, "正在改成更地道的说法…");
   });
 });

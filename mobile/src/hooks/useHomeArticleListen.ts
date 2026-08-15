@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
-import { conversionSpeakable } from "../services/homeChat";
+import { conversionSpeakable, homeListenShouldStop } from "../services/homeChat";
 import {
   loadSpeechSpeed,
   peekSpeechSpeed,
@@ -20,7 +20,7 @@ export function useHomeArticleListen(recents: Conversion[]): {
   const [listenId, setListenId] = useState<string | null>(null);
   const item = recents.find((row) => row.id === listenId);
   const sentences = item ? conversionSpeakable(item) : [];
-  const { mode, toggle, stop } = useArticleSpeech(sentences, () => undefined, listenId ?? "", speed);
+  const { mode, start, stop } = useArticleSpeech(sentences, () => undefined, listenId ?? "", speed);
   const pendingStart = useRef<string | null>(null);
   const playingId = useRef<string | null>(null);
   const playingRef = useRef(false);
@@ -41,8 +41,8 @@ export function useHomeArticleListen(recents: Conversion[]): {
     if (!pendingStart.current || pendingStart.current !== listenId) return;
     if (sentences.length === 0) return;
     pendingStart.current = null;
-    toggle("all");
-  }, [listenId, sentences.length, toggle]);
+    start("all");
+  }, [listenId, sentences.length, start]);
 
   useEffect(() => {
     if (mode === "all" && listenId) playingId.current = listenId;
@@ -61,15 +61,16 @@ export function useHomeArticleListen(recents: Conversion[]): {
 
   const toggleListen = useCallback(
     (id: string) => {
-      if (listenId === id && mode === "all") {
+      if (homeListenShouldStop(listenId, id)) {
         stopListen();
         return;
       }
+      stop();
       setSpeed(peekSpeechSpeed());
       pendingStart.current = id;
       setListenId(id);
     },
-    [listenId, mode, stopListen]
+    [listenId, stop, stopListen]
   );
 
   useFocusEffect(

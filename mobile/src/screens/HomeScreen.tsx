@@ -17,10 +17,11 @@ import {
   HOME_COPY_TOAST,
   HOME_EMPTY_HINT,
   HOME_OFFLINE_BANNER,
-  sendFromComposer
+  sendFromComposer,
+  shouldScrollChatToEnd
 } from "../services/homeChat";
 import { colors, space } from "../theme";
-import { CONVERT_WAIT_MS, INPUT_CHAR_CAP, type Conversion } from "../types";
+import { convertWaitLeftMs, INPUT_CHAR_CAP, type Conversion } from "../types";
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<ConvertStackParamList>>();
@@ -33,6 +34,12 @@ export function HomeScreen() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const turns = conversationOrder(recents);
   const { listenId, toggleListen, stopListen } = useHomeArticleListen(recents);
+  const prevTurnCount = useRef(0);
+  const stickToEnd = useRef(false);
+  if (shouldScrollChatToEnd(prevTurnCount.current, turns.length)) {
+    stickToEnd.current = true;
+  }
+  prevTurnCount.current = turns.length;
 
   const scrollToEnd = useCallback((animated: boolean) => {
     listRef.current?.scrollToEnd({ animated });
@@ -48,8 +55,7 @@ export function HomeScreen() {
     const timers = recents
       .filter((item) => item.status === "loading")
       .map((item) => {
-        const left = CONVERT_WAIT_MS - (Date.now() - item.createdAt);
-        return setTimeout(() => failIfLoading(item.id, "gemini_timeout"), Math.max(0, left));
+        return setTimeout(() => failIfLoading(item.id, "gemini_timeout"), convertWaitLeftMs(item));
       });
     return () => timers.forEach((timer) => clearTimeout(timer));
   }, [recents, failIfLoading]);
@@ -97,7 +103,12 @@ export function HomeScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.thread}
         keyboardShouldPersistTaps="handled"
-        onContentSizeChange={() => scrollToEnd(true)}
+        extraData={listenId}
+        onContentSizeChange={() => {
+          if (!stickToEnd.current) return;
+          stickToEnd.current = false;
+          scrollToEnd(true);
+        }}
         ListEmptyComponent={<EmptyHint text={HOME_EMPTY_HINT} />}
         renderItem={({ item }) => (
           <ChatTurn

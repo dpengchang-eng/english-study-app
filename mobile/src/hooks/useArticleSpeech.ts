@@ -23,6 +23,7 @@ export function useArticleSpeech(
   mode: ArticleSpeechMode;
   playingId: string | null;
   toggle: (mode: Exclude<ArticlePlayMode, "once" | "loopOne">) => void;
+  start: (mode: ArticlePlayMode, selectedId?: string | null) => void;
   playOnce: (id: string) => void;
   loopOne: (id: string) => void;
   restartCurrent: (nextSpeed?: SpeechSpeed) => void;
@@ -162,5 +163,5 @@ export function useArticleSpeech(
     }, [stop])
   );
 
-  return { mode, playingId, toggle, playOnce, loopOne, restartCurrent, stop };
+  return { mode, playingId, toggle, start, playOnce, loopOne, restartCurrent, stop };
 }

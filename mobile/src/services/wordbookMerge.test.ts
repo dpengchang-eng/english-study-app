@@ -7,6 +7,7 @@ function item(partial: Partial<WordbookItem> & Pick<WordbookItem, "id" | "phrase
   return {
     ipa: "",
     senses: [],
+    simpleEn: "",
     sentenceContext: partial.phrase,
     conversionId: "local",
     blankStart: 0,

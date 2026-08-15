@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
-import { lookupPhrase } from "../services/lookup";
-import { phraseFromTokens } from "../services/wordbook";
+import { lookupWord } from "../services/lookup";
+import { EMPTY_SELECTION, phraseFromTokens } from "../services/wordbook";
 import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
 
@@ -13,10 +13,11 @@ export function LookupScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "Lookup">>();
   const { tokens, sentenceTokens, sentenceText, conversionId } = route.params;
   const { items, savePhrase } = useWordbook();
-  const { phrase, lemmaKey } = phraseFromTokens(tokens);
+  const { phrase, lemmaKey } = phraseFromTokens(tokens, sentenceText);
   const alreadySaved = items.some((item) => item.id === lemmaKey);
   const [ipa, setIpa] = useState("");
   const [senses, setSenses] = useState<string[]>([]);
+  const [simpleEn, setSimpleEn] = useState("");
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState<string | null>(alreadySaved ? "已在词本" : null);
   const [speakError, setSpeakError] = useState<string | null>(null);
@@ -27,23 +28,25 @@ export function LookupScreen() {
 
   useEffect(() => {
     let live = true;
-    void lookupPhrase(phrase, lemmaKey)
+    void lookupWord({ lemma: lemmaKey, surface: phrase, sentenceContext: sentenceText })
       .then((result) => {
         if (!live) return;
         setIpa(result.ipa);
         setSenses(result.senses.slice(0, 3));
+        setSimpleEn(result.simpleEn);
         setLoading(false);
       })
       .catch(() => {
         if (!live) return;
         setIpa("");
-        setSenses(["查词失败，请再试一次"]);
+        setSenses([]);
+        setSimpleEn("");
         setLoading(false);
       });
     return () => {
       live = false;
     };
-  }, [lemmaKey, phrase]);
+  }, [lemmaKey, phrase, sentenceText]);
 
   const save = async (): Promise<void> => {
     if (loading) return;
@@ -54,15 +57,16 @@ export function LookupScreen() {
         sentenceText,
         conversionId,
         ipa,
-        senses: senses.slice(0, 3)
+        senses: senses.slice(0, 3),
+        simpleEn
       });
       if (!result.created) {
         setSaved("已在词本");
         return;
       }
       setSaved(result.item.syncState === "synced" ? "已加入词本" : "未同步到云");
-    } catch {
-      setSaved("只能存 1 到 6 个连续单词");
+    } catch (error) {
+      setSaved(error instanceof Error && error.message === EMPTY_SELECTION ? EMPTY_SELECTION : "没存上，再试一次");
     }
   };
 
@@ -71,6 +75,7 @@ export function LookupScreen() {
       <Text style={styles.phrase}>{phrase || lemmaKey}</Text>
       {loading ? <ActivityIndicator color={colors.accent} /> : null}
       {!loading && ipa ? <Text style={styles.ipa}>{ipa}</Text> : null}
+      {!loading && simpleEn ? <Text style={styles.simpleEn}>{simpleEn}</Text> : null}
       {!loading
         ? senses.slice(0, 3).map((sense) => (
             <Text key={sense} style={styles.sense}>
@@ -105,6 +110,7 @@ const styles = StyleSheet.create({
   page: { padding: space.lg, gap: 10, backgroundColor: colors.card, flex: 1 },
   phrase: { fontSize: 26, fontWeight: "800", color: colors.ink },
   ipa: { color: colors.muted, fontSize: 16 },
+  simpleEn: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   sense: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   row: { flexDirection: "row", gap: 8, marginTop: 8 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },

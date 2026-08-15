@@ -12,6 +12,7 @@ import { auth } from "../firebase";
 import { openLookup } from "../navigation/rootNav";
 import type { ConvertStackParamList } from "../navigation/types";
 import { ensureTappableTokens } from "../services/align";
+import { consecutiveTokenSpan, phraseFromTokens } from "../services/wordbook";
 import {
   loadSpeechSpeed,
   nextSpeechSpeed,
@@ -26,14 +27,7 @@ import { colors, space } from "../theme";
 import { convertWaitLeftMs, type Sentence, type Token } from "../types";
 
 function consecutiveWords(tokens: Token[], a: Token, b: Token): Token[] | null {
-  const words = tokens.filter((token) => token.isWord);
-  const i = words.findIndex((token) => token.id === a.id);
-  const j = words.findIndex((token) => token.id === b.id);
-  if (i < 0 || j < 0) return null;
-  const from = Math.min(i, j);
-  const to = Math.max(i, j);
-  if (to - from + 1 > 6) return null;
-  return words.slice(from, to + 1);
+  return consecutiveTokenSpan(tokens, a, b);
 }
 
 export function ResultScreen() {
@@ -215,7 +209,7 @@ export function ResultScreen() {
       {picked ? (
         <Pressable style={styles.phrase} onPress={() => openTokens(picked.sentence, picked.tokens)}>
           <Text style={styles.phraseText}>
-            保存短语：{picked.tokens.map((token) => token.surface).join(" ")}
+            保存短语：{phraseFromTokens(picked.tokens, picked.sentence.text).phrase}
           </Text>
         </Pressable>
       ) : null}

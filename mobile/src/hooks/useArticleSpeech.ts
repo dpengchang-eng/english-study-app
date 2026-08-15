@@ -19,8 +19,9 @@ export function useArticleSpeech(
 ): {
   mode: ArticleSpeechMode;
   playingId: string | null;
-  toggle: (mode: Exclude<ArticlePlayMode, "once">) => void;
+  toggle: (mode: Exclude<ArticlePlayMode, "once" | "loopOne">) => void;
   playOnce: (id: string) => void;
+  loopOne: (id: string) => void;
   stop: () => void;
 } {
   const items = speakableItems(sentences);
@@ -85,7 +86,7 @@ export function useArticleSpeech(
   );
 
   const toggle = useCallback(
-    (playMode: Exclude<ArticlePlayMode, "once">) => {
+    (playMode: Exclude<ArticlePlayMode, "once" | "loopOne">) => {
       if (mode === playMode) {
         stop();
         return;
@@ -102,6 +103,17 @@ export function useArticleSpeech(
         return;
       }
       start("once", id);
+    },
+    [mode, playingId, start, stop]
+  );
+
+  const loopOne = useCallback(
+    (id: string) => {
+      if (mode === "loopOne" && playingId === id) {
+        stop();
+        return;
+      }
+      start("loopOne", id);
     },
     [mode, playingId, start, stop]
   );
@@ -127,5 +139,5 @@ export function useArticleSpeech(
     }, [stop])
   );
 
-  return { mode, playingId, toggle, playOnce, stop };
+  return { mode, playingId, toggle, playOnce, loopOne, stop };
 }

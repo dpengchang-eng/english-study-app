@@ -13,7 +13,7 @@ describe("listen tts", () => {
     assert.doesNotMatch(pkg, /expo-speech-recognition/);
   });
 
-  it("locks the result row to 听全文 | 复读 with no 这句 option", () => {
+  it("keeps 听全文 | 复读 on top and 听 + 循环 on each sentence", () => {
     const result = readFileSync(new URL("../screens/ResultScreen.tsx", import.meta.url), "utf8");
     const list = readFileSync(new URL("../components/SentenceList.tsx", import.meta.url), "utf8");
     const hook = readFileSync(new URL("../hooks/useArticleSpeech.ts", import.meta.url), "utf8");
@@ -22,20 +22,22 @@ describe("listen tts", () => {
     assert.match(result, /复读/);
     assert.match(result, /停止/);
     assert.match(result, /listenPipe/);
-    assert.match(list, />听</);
+    assert.match(result, /toggle\("loopAll"\)/);
+    assert.match(result, /onLoop/);
+    assert.match(list, /听/);
+    assert.match(list, /循环/);
+    assert.match(list, /停止/);
     assert.match(list, /playingId/);
     assert.match(list, /cardOn/);
     assert.match(hook, /useFocusEffect/);
     assert.match(hook, /AppState/);
     assert.match(hook, /stopSpeaking/);
-    assert.match(result, /toggle\("loopAll"\)/);
+    assert.match(hook, /loopOne/);
+    assert.match(planner, /loopOne/);
     assert.match(result, /stop\(\);\s*setPicked\(null\);\s*openLookup/s);
     assert.doesNotMatch(result, /这句/);
+    assert.doesNotMatch(list, /这句/);
     assert.doesNotMatch(result, /单句循环/);
-    assert.doesNotMatch(result, /loopOne/);
-    assert.doesNotMatch(hook, /loopOne/);
-    assert.doesNotMatch(planner, /loopOne/);
-    assert.doesNotMatch(planner, /这句/);
     assert.doesNotMatch(result, /expo-speech-recognition/);
     assert.doesNotMatch(result, /SENTENCE_CAP/);
   });

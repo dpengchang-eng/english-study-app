@@ -17,14 +17,16 @@ describe("speakableItems", () => {
 });
 
 describe("resolveStartIndex", () => {
-  it("starts 听全文 and 复读 at the first sentence", () => {
+  it("starts 听全文 and 复读 at sentence 1", () => {
     assert.equal(resolveStartIndex("all", 4, 2), 0);
     assert.equal(resolveStartIndex("loopAll", 4, 2), 0);
   });
 
-  it("starts per-sentence 听 on that sentence, or the first if none", () => {
+  it("starts 听 and 循环 on that sentence", () => {
     assert.equal(resolveStartIndex("once", 4, 3), 3);
+    assert.equal(resolveStartIndex("loopOne", 4, 2), 2);
     assert.equal(resolveStartIndex("once", 4, null), 0);
+    assert.equal(resolveStartIndex("loopOne", 4, null), 0);
   });
 
   it("returns null when there is nothing to read", () => {
@@ -41,6 +43,10 @@ describe("nextPlayIndex", () => {
     assert.equal(nextPlayIndex("all", 0, 3), 1);
     assert.equal(nextPlayIndex("all", 1, 3), 2);
     assert.equal(nextPlayIndex("all", 2, 3), null);
+  });
+
+  it("repeats one sentence for 循环", () => {
+    assert.equal(nextPlayIndex("loopOne", 1, 3), 1);
   });
 
   it("wraps the article for 复读", () => {
@@ -61,7 +67,7 @@ describe("indexById", () => {
   });
 });
 
-function heard(mode: "once" | "all" | "loopAll", length: number, selected: number | null, steps: number): number[] {
+function heard(mode: "once" | "all" | "loopOne" | "loopAll", length: number, selected: number | null, steps: number): number[] {
   let index = resolveStartIndex(mode, length, selected);
   const ids: number[] = [];
   while (index != null && ids.length < steps) {
@@ -76,9 +82,9 @@ describe("article playthrough", () => {
     assert.deepEqual(heard("all", 5, 2, 10), [0, 1, 2, 3, 4]);
   });
 
-  it("loops every sentence for 复读 and does not repeat one sentence", () => {
+  it("loops one sentence for 循环 and the whole article for 复读", () => {
+    assert.deepEqual(heard("loopOne", 5, 2, 4), [2, 2, 2, 2]);
     assert.deepEqual(heard("loopAll", 3, 0, 7), [0, 1, 2, 0, 1, 2, 0]);
-    assert.notDeepEqual(heard("loopAll", 5, 2, 4), [2, 2, 2, 2]);
   });
 
   it("keeps per-sentence 听 as play once", () => {

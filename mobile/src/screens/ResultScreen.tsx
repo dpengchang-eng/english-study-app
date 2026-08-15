@@ -40,7 +40,7 @@ export function ResultScreen() {
   const [copied, setCopied] = useState(false);
   const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
   const [speakError, setSpeakError] = useState<string | null>(null);
-  const { mode, playingId, toggle, playOnce, stop } = useArticleSpeech(
+  const { mode, playingId, toggle, playOnce, loopOne, stop } = useArticleSpeech(
     sentences,
     () => setSpeakError(SPEAK_FAIL_TEXT),
     conversionId
@@ -78,6 +78,11 @@ export function ResultScreen() {
   const play = (sentence: Sentence): void => {
     setSpeakError(null);
     playOnce(sentence.id);
+  };
+
+  const loop = (sentence: Sentence): void => {
+    setSpeakError(null);
+    loopOne(sentence.id);
   };
 
   const onPlayAll = (): void => {
@@ -152,7 +157,9 @@ export function ResultScreen() {
           sentences={sentences}
           selectedIds={picked?.tokens.map((token) => token.id)}
           playingId={playingId}
+          listenMode={mode}
           onPlay={play}
+          onLoop={loop}
           onTapToken={onTapToken}
           onLongPressToken={onLongPressToken}
         />

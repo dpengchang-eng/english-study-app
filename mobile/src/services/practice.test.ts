@@ -305,6 +305,20 @@ describe("cloze after-answer SRS", () => {
     assert.doesNotMatch(nextHandler, /passPractice/);
   });
 
+  it("再练错题 is a new round; 放回复习 is this session only", () => {
+    const cloze = readFileSync(new URL("../screens/ClozeScreen.tsx", import.meta.url), "utf8");
+    const retry = cloze.slice(cloze.indexOf("const retryMissed"), cloze.indexOf("const submit ="));
+    assert.match(retry, /pickClozeItems\(itemsRef\.current, missedIds\)/);
+    assert.match(retry, /setPracticedIds\(\[\]\)/);
+    assert.match(retry, /setMissedIds\(\[\]\)/);
+    assert.match(retry, /createPractice/);
+    assert.doesNotMatch(retry, /practicedIds,/);
+    const ret = cloze.slice(cloze.indexOf("const returnRoundToReview"), cloze.indexOf("if (session === null)"));
+    assert.match(ret, /returnPracticedToToday\(uid, itemsRef\.current, practicedIds/);
+    assert.match(ret, /checkedIds: practicedIds/);
+    assert.doesNotMatch(ret, /missedIds/);
+  });
+
   it("放回复习 sets dueAt to today Seoul and keeps box", () => {
     const future = { ...item, box: 2 as const, dueAt: now + 7 * 24 * 60 * 60 * 1000, lastResult: "3" as const };
     const next = returnDueAtToTodaySeoul(future, now);

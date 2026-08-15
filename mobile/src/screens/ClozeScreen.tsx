@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
+import { finishCardOnce, passAndNextOnce } from "../services/clozeActions";
 import { blankParts, clearPracticeAnswers, clozeAnswerLine, createPractice, type PracticeSession, passPractice, returnPracticedToToday, submitPractice } from "../services/practice";
 import { clozeHydrateKey, pickClozeItems, practiceSourceItems, seoulDayKey, waitForClozeHydrate } from "../services/reviewCalendar";
 import { queueReviewFocus } from "../services/reviewFocus";
@@ -51,6 +52,8 @@ export function ClozeScreen() {
   itemsRef.current = items;
   const listeningRef = useRef(false);
   listeningRef.current = listening;
+  const busyRef = useRef(false);
+  const advancedIndexRef = useRef<number | null>(null);
 
   const stopListen = useCallback((): void => {
     stopSpeaking();
@@ -93,6 +96,8 @@ export function ClozeScreen() {
     setWasCorrect(false);
     setMissedIds([]);
     setPracticedIds([]);
+    busyRef.current = false;
+    advancedIndexRef.current = null;
     stopListen();
     const hang = setTimeout(() => {
       if (live) setSession((current) => current ?? { sessionId: "local", cards: [] });
@@ -141,14 +146,25 @@ export function ClozeScreen() {
     resetCard();
   };
 
-  const finishCard = (): void => {
-    if (!session || index + 1 >= session.cards.length) {
+  const applyAdvance = (pos: { index: number; settled: boolean }): void => {
+    if (pos.settled) {
       stopListen();
       setSettled(true);
       return;
     }
     resetCard();
-    setIndex((value) => value + 1);
+    setIndex(pos.index);
+  };
+
+  const finishCard = (): void => {
+    const result = finishCardOnce({
+      busyRef,
+      advancedIndexRef,
+      index,
+      cardCount: session?.cards.length ?? 0
+    });
+    if (result.status === "blocked") return;
+    applyAdvance(result);
   };
 
   const toggleListen = async (sentenceContext: string): Promise<void> => {
@@ -194,6 +210,8 @@ export function ClozeScreen() {
       setMissedIds([]);
       setPracticedIds([]);
       setSpeakError(null);
+      busyRef.current = false;
+      advancedIndexRef.current = null;
     } catch {
       setSession({ sessionId: "local", cards: [] });
     } finally {
@@ -238,26 +256,45 @@ export function ClozeScreen() {
   };
 
   const passAndNext = async (card: PracticeCard): Promise<void> => {
-    if (!wasCorrect || busy) return;
+    if (!wasCorrect || busyRef.current || advancedIndexRef.current === index) return;
     setBusy(true);
-    const nextItems = await passPractice(uid, itemsRef.current, card.wordbookItemId);
-    syncItems(nextItems);
-    const updated = nextItems.find((item) => item.id === card.wordbookItemId);
-    setSyncWarn(updated?.syncState === "error" ? "未同步到云" : "");
-    setBusy(false);
-    finishCard();
+    try {
+      const result = await passAndNextOnce({
+        busyRef,
+        advancedIndexRef,
+        index,
+        cardCount: session?.cards.length ?? 0,
+        wasCorrect,
+        writeGood: async () => {
+          const nextItems = await passPractice(uid, itemsRef.current, card.wordbookItemId);
+          syncItems(nextItems);
+          const updated = nextItems.find((item) => item.id === card.wordbookItemId);
+          setSyncWarn(updated?.syncState === "error" ? "未同步到云" : "");
+        }
+      });
+      if (result.status === "passed") applyAdvance(result);
+    } finally {
+      if (!busyRef.current) setBusy(false);
+    }
   };
 
   const returnRoundToReview = async (): Promise<void> => {
-    if (!practicedIds.length || busy) return;
+    if (!practicedIds.length || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
-    const now = Date.now();
-    const nextItems = await returnPracticedToToday(uid, itemsRef.current, practicedIds, now);
-    syncItems(nextItems);
-    queueReviewFocus({ dayKey: seoulDayKey(new Date(now)), checkedIds: practicedIds });
-    setBusy(false);
-    stopListen();
-    navigation.navigate("Tabs", { screen: "ReviewTab" });
+    try {
+      const now = Date.now();
+      const nextItems = await returnPracticedToToday(uid, itemsRef.current, practicedIds, now);
+      syncItems(nextItems);
+      queueReviewFocus({ dayKey: seoulDayKey(new Date(now)), checkedIds: practicedIds });
+      stopListen();
+      navigation.navigate("Tabs", { screen: "ReviewTab" });
+    } catch {
+      // stay on 结算
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   };
 
   if (session === null) {
@@ -368,7 +405,7 @@ export function ClozeScreen() {
           </>
         ) : (
           <>
-            <Pressable style={styles.btn} onPress={finishCard}>
+            <Pressable style={[styles.btn, busy && styles.off]} onPress={finishCard} disabled={busy}>
               <Text style={styles.btnText}>下一题</Text>
             </Pressable>
             <Pressable style={styles.ghost} onPress={retrySameCard}>

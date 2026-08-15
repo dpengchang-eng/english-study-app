@@ -1,6 +1,6 @@
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { EmptyHint } from "../components/EmptyHint";
 import { MonthCalendar } from "../components/MonthCalendar";
@@ -8,7 +8,7 @@ import { useWordbook } from "../context/WordbookState";
 import { openCloze } from "../navigation/rootNav";
 import type { TabParamList } from "../navigation/types";
 import { dottedDayKeys, dueLabel, itemsOnCalendarDay, seoulDayKey, snapSelectedDayToToday, todayReviewCount } from "../services/reviewCalendar";
-import { takeReviewFocus } from "../services/reviewFocus";
+import { applyReviewPinEffect, resetReviewPinForDay, takeReviewFocus, toggleReviewChecked } from "../services/reviewFocus";
 import { colors, space } from "../theme";
 import type { WordbookItem } from "../types";
 
@@ -18,6 +18,8 @@ export function ReviewScreen() {
   const [now, setNow] = useState(() => Date.now());
   const [selectedDay, setSelectedDay] = useState(() => seoulDayKey(new Date()));
   const [pinnedChecked, setPinnedChecked] = useState<string[] | null>(null);
+  const pinConsumedRef = useRef(false);
+  const selectedDayRef = useRef(selectedDay);
   const [calendarEpoch, setCalendarEpoch] = useState(0);
   useFocusEffect(
     useCallback(() => {
@@ -25,6 +27,7 @@ export function ReviewScreen() {
       setNow(nextNow);
       const focus = takeReviewFocus();
       if (focus) {
+        pinConsumedRef.current = false;
         setSelectedDay(focus.dayKey);
         setPinnedChecked(focus.checkedIds);
         setCalendarEpoch((value) => value + 1);
@@ -40,14 +43,23 @@ export function ReviewScreen() {
   const dayIds = dayItems.map((item) => item.id).join("\0");
 
   useEffect(() => {
+    const dayChanged = selectedDayRef.current !== selectedDay;
+    selectedDayRef.current = selectedDay;
     if (pinnedChecked) {
-      setChecked(new Set(pinnedChecked));
+      const next = applyReviewPinEffect({ pinned: pinnedChecked, checked: [], consumed: false }, dayIds);
+      pinConsumedRef.current = next.consumed;
+      setPinnedChecked(next.pinned);
+      setChecked(new Set(next.checked));
       return;
     }
-    setChecked(new Set(dayIds ? dayIds.split("\0") : []));
+    if (pinConsumedRef.current && !dayChanged) return;
+    const next = resetReviewPinForDay(dayIds);
+    pinConsumedRef.current = next.consumed;
+    setChecked(new Set(next.checked));
   }, [dayIds, pinnedChecked, selectedDay]);
 
   const selectDay = (dayKey: string): void => {
+    pinConsumedRef.current = false;
     setPinnedChecked(null);
     setSelectedDay(dayKey);
   };
@@ -60,12 +72,9 @@ export function ReviewScreen() {
   };
 
   const toggle = (id: string): void => {
-    setChecked((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    pinConsumedRef.current = true;
+    setPinnedChecked(null);
+    setChecked((current) => new Set(toggleReviewChecked({ pinned: null, checked: [...current], consumed: true }, id).checked));
   };
 
   return (

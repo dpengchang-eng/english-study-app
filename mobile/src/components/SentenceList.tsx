@@ -64,11 +64,8 @@ export function SentenceList({
                   )}
               </View>
               {onPlay ? (
-                <Pressable
-                  style={[styles.play, sentence.id === playingId && styles.playOn]}
-                  onPress={() => onPlay(sentence)}
-                >
-                  <Text style={[styles.playText, sentence.id === playingId && styles.playOnText]}>听</Text>
+                <Pressable style={styles.play} onPress={() => onPlay(sentence)}>
+                  <Text style={styles.playText}>听</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -89,7 +86,6 @@ const styles = StyleSheet.create({
     padding: 12
   },
   cardOn: {
-    borderColor: colors.accent,
     backgroundColor: colors.accentSoft
   },
   row: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
@@ -105,9 +101,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6
   },
-  playOn: { backgroundColor: colors.accent },
   playText: { color: colors.ink, fontWeight: "700", fontSize: 13 },
-  playOnText: { color: "#fff" },
   bone: { height: 16, borderRadius: 8, backgroundColor: colors.line },
   boneWide: { width: "100%" },
   boneMid: { width: "82%" },

@@ -40,12 +40,18 @@ export function ResultScreen() {
   const [copied, setCopied] = useState(false);
   const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
   const [speakError, setSpeakError] = useState<string | null>(null);
+  const [repeatOpen, setRepeatOpen] = useState(false);
   const { mode, playingId, toggle, playOnce, stop } = useArticleSpeech(
     sentences,
     () => setSpeakError(SPEAK_FAIL_TEXT),
     conversionId
   );
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
+  const showRepeatOptions = repeatOpen || mode === "loopOne" || mode === "loopAll";
+
+  useEffect(() => {
+    setRepeatOpen(false);
+  }, [conversionId]);
 
   useEffect(() => {
     if (!conversion || conversion.status !== "loading") return;
@@ -80,7 +86,40 @@ export function ResultScreen() {
     playOnce(sentence.id);
   };
 
+  const onPlayAll = (): void => {
+    setSpeakError(null);
+    setRepeatOpen(false);
+    toggle("all");
+  };
+
+  const onOpenRepeat = (): void => {
+    setSpeakError(null);
+    if (mode !== "idle") stop();
+    setRepeatOpen(true);
+  };
+
+  const onRepeatThis = (): void => {
+    setSpeakError(null);
+    if (mode === "loopOne") {
+      setRepeatOpen(false);
+      stop();
+      return;
+    }
+    toggle("loopOne");
+  };
+
+  const onRepeatAll = (): void => {
+    setSpeakError(null);
+    if (mode === "loopAll") {
+      setRepeatOpen(false);
+      stop();
+      return;
+    }
+    toggle("loopAll");
+  };
+
   const openTokens = (sentence: Sentence, tokens: Token[]): void => {
+    stop();
     setPicked(null);
     openLookup({
       tokens,
@@ -108,6 +147,35 @@ export function ResultScreen() {
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Text style={styles.source}>{conversion.sourceText}</Text>
+      {conversion.status === "ready" ? (
+        <View style={styles.listenRow}>
+          <Pressable onPress={onPlayAll} hitSlop={8}>
+            <Text style={mode === "all" ? styles.listenOn : styles.listenText}>
+              {mode === "all" ? "停止" : "听全文"}
+            </Text>
+          </Pressable>
+          <Text style={styles.listenPipe}>|</Text>
+          {showRepeatOptions ? (
+            <>
+              <Pressable onPress={onRepeatThis} hitSlop={8}>
+                <Text style={mode === "loopOne" ? styles.listenOn : styles.listenText}>
+                  {mode === "loopOne" ? "停止" : "这句"}
+                </Text>
+              </Pressable>
+              <Text style={styles.listenPipe}>|</Text>
+              <Pressable onPress={onRepeatAll} hitSlop={8}>
+                <Text style={mode === "loopAll" ? styles.listenOn : styles.listenText}>
+                  {mode === "loopAll" ? "停止" : "全文"}
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable onPress={onOpenRepeat} hitSlop={8}>
+              <Text style={styles.listenText}>复读</Text>
+            </Pressable>
+          )}
+        </View>
+      ) : null}
       {conversion.status === "loading" ? <SentenceList sentences={[]} loading /> : null}
       {conversion.status === "failed" ? (
         <ErrorState
@@ -120,24 +188,6 @@ export function ResultScreen() {
       {speakError ? <Text style={styles.speakError}>{speakError}</Text> : null}
       {conversion.status === "ready" && conversion.syncState === "error" ? (
         <Text style={styles.speakError}>未同步到云</Text>
-      ) : null}
-      {conversion.status === "ready" ? (
-        <View style={styles.listenBar}>
-          <Pressable style={mode === "all" ? styles.btn : styles.ghost} onPress={() => toggle("all")}>
-            <Text style={mode === "all" ? styles.btnText : styles.ghostText}>听全文</Text>
-          </Pressable>
-          <Pressable style={mode === "loopOne" ? styles.btn : styles.ghost} onPress={() => toggle("loopOne")}>
-            <Text style={mode === "loopOne" ? styles.btnText : styles.ghostText}>单句循环</Text>
-          </Pressable>
-          <Pressable style={mode === "loopAll" ? styles.btn : styles.ghost} onPress={() => toggle("loopAll")}>
-            <Text style={mode === "loopAll" ? styles.btnText : styles.ghostText}>全文循环</Text>
-          </Pressable>
-          {mode !== "idle" ? (
-            <Pressable style={styles.ghost} onPress={stop}>
-              <Text style={styles.ghostText}>停止</Text>
-            </Pressable>
-          ) : null}
-        </View>
       ) : null}
       {conversion.status === "ready" ? (
         <SentenceList
@@ -176,7 +226,10 @@ const styles = StyleSheet.create({
   speakError: { color: colors.warn, fontSize: 14 },
   phrase: { backgroundColor: colors.accentSoft, borderRadius: 12, padding: 12 },
   phraseText: { color: colors.ink, fontWeight: "700" },
-  listenBar: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  listenRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  listenText: { color: colors.ink, fontWeight: "700", fontSize: 16 },
+  listenOn: { color: colors.accent, fontWeight: "700", fontSize: 16 },
+  listenPipe: { color: colors.muted, fontSize: 16 },
   actions: { flexDirection: "row", gap: 8 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
   btnText: { color: "#fff", fontWeight: "700" },

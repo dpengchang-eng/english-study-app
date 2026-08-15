@@ -1,5 +1,6 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, type AppStateStatus } from "react-native";
 import {
   indexById,
   nextPlayIndex,
@@ -111,6 +112,14 @@ export function useArticleSpeech(
     resetRef.current = resetKey;
     stop();
   }, [resetKey, stop]);
+
+  useEffect(() => {
+    const onChange = (status: AppStateStatus) => {
+      if (status !== "active") stop();
+    };
+    const sub = AppState.addEventListener("change", onChange);
+    return () => sub.remove();
+  }, [stop]);
 
   useFocusEffect(
     useCallback(() => {

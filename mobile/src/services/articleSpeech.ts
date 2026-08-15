@@ -10,7 +10,7 @@ export function indexById(items: Array<{ id: string }>, id: string | null | unde
   return index >= 0 ? index : null;
 }
 
-/** 单句 starts on the current/selected sentence; 听全文 / 全文循环 start at the first sentence. */
+/** 这句 starts on the highlighted sentence; 听全文 / 复读-全文 start at the first sentence. */
 export function resolveStartIndex(
   mode: ArticlePlayMode,
   length: number,

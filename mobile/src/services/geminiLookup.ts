@@ -1,6 +1,9 @@
 import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 import { firebaseApp } from "../firebase";
-import type { LookupResult } from "./lookup";
+import { SENTENCE_CONTEXT_MAX } from "../types";
+import { asLookup, type LookupInput, type LookupResult } from "./lookupParse";
+
+export { asLookup };
 
 const MODEL = "gemini-flash-lite-latest";
 
@@ -18,18 +21,19 @@ function parseJson(text: string): unknown {
   return JSON.parse(trimmed) as unknown;
 }
 
-function asLookup(raw: unknown): LookupResult | null {
-  if (!raw || typeof raw !== "object") return null;
-  const data = raw as Record<string, unknown>;
-  const ipa = typeof data.ipa === "string" ? data.ipa.trim() : "";
-  const senses = Array.isArray(data.senses)
-    ? data.senses.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, 3)
-    : [];
-  if (senses.length === 0) return null;
-  return { ipa, senses };
+function lookupPrompt(input: LookupInput): string {
+  return [
+    "Return JSON only with keys ipa, senses, and simpleEn.",
+    "ipa is American English phonetic. Empty string is ok.",
+    "senses is up to 3 short Simplified Chinese glosses. An empty array is ok.",
+    "simpleEn is one short simple English sentence about the selected text. Empty string is ok.",
+    `Lemma: ${input.lemma}`,
+    `Surface: ${input.surface}`,
+    `Sentence: ${input.sentenceContext.slice(0, SENTENCE_CONTEXT_MAX)}`
+  ].join("\n");
 }
 
-async function lookupRest(phrase: string, apiKey: string): Promise<LookupResult | null> {
+async function lookupRest(input: LookupInput, apiKey: string): Promise<LookupResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
@@ -43,31 +47,27 @@ async function lookupRest(phrase: string, apiKey: string): Promise<LookupResult 
           contents: [
             {
               role: "user",
-              parts: [
-                {
-                  text: `Return JSON only with keys ipa and senses. ipa is American English phonetic. senses is up to 3 short Simplified Chinese glosses.\nPhrase: ${phrase}`
-                }
-              ]
+              parts: [{ text: lookupPrompt(input) }]
             }
           ],
           generationConfig: { temperature: 0.2, responseMimeType: "application/json" }
         })
       }
     );
-    if (!response.ok) return null;
+    if (!response.ok) return { ipa: "", senses: [], simpleEn: "" };
     const body = (await response.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     };
     const textOut = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
     return asLookup(parseJson(textOut));
   } catch {
-    return null;
+    return { ipa: "", senses: [], simpleEn: "" };
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function lookupAiLogic(phrase: string): Promise<LookupResult | null> {
+async function lookupAiLogic(input: LookupInput): Promise<LookupResult> {
   try {
     const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
     const model = getGenerativeModel(
@@ -78,17 +78,19 @@ async function lookupAiLogic(phrase: string): Promise<LookupResult | null> {
       },
       { timeout: 8000 }
     );
-    const result = await model.generateContent(
-      `Return JSON only with keys ipa and senses. ipa is American English phonetic. senses is up to 3 short Simplified Chinese glosses.\nPhrase: ${phrase}`
-    );
+    const result = await model.generateContent(lookupPrompt(input));
     return asLookup(parseJson(result.response.text()));
   } catch {
-    return null;
+    return { ipa: "", senses: [], simpleEn: "" };
   }
 }
 
-export async function rewriteLookup(phrase: string): Promise<LookupResult | null> {
+export async function geminiLookup(input: LookupInput): Promise<LookupResult> {
   const key = geminiApiKey();
-  if (key) return lookupRest(phrase, key);
-  return lookupAiLogic(phrase);
+  if (key) return lookupRest(input, key);
+  return lookupAiLogic(input);
+}
+
+export async function rewriteLookup(phrase: string): Promise<LookupResult> {
+  return geminiLookup({ lemma: phrase, surface: phrase, sentenceContext: "" });
 }

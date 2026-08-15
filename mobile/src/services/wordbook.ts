@@ -1,10 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, deleteDoc, doc, getDocs, query, setDoc, Timestamp, where, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
-import type { SrsBox, Token, WordbookItem } from "../types";
-import { offsetsFromTokens, resolveBlankSpan } from "./blank";
-import { slugLemma } from "./slug";
+import { PHRASE_MAX, SENTENCE_CONTEXT_MAX, type SrsBox, type Token, type WordbookItem } from "../types";
 import { mergeWordbookItems } from "./wordbookMerge";
+import { wordbookDraftFromSelection } from "./wordbookSelect";
+
+export {
+  consecutiveTokenSpan,
+  EMPTY_SELECTION,
+  phraseFromTokens,
+  selectWordTokens,
+  wordbookDraftFromSelection
+} from "./wordbookSelect";
 
 const localKey = (uid: string): string => `didao-wordbook-v1:${uid}`;
 const FIRESTORE_READ_MS = 8_000;
@@ -52,7 +59,8 @@ function asItem(id: string, raw: Record<string, unknown>): WordbookItem | null {
     phrase: raw.phrase,
     ipa: typeof raw.ipa === "string" ? raw.ipa : "",
     senses: Array.isArray(raw.senses) ? raw.senses.filter((item): item is string => typeof item === "string").slice(0, 3) : [],
-    sentenceContext: typeof raw.sentenceContext === "string" ? raw.sentenceContext.slice(0, 760) : raw.phrase,
+    simpleEn: typeof raw.simpleEn === "string" ? raw.simpleEn.slice(0, SENTENCE_CONTEXT_MAX) : "",
+    sentenceContext: typeof raw.sentenceContext === "string" ? raw.sentenceContext.slice(0, SENTENCE_CONTEXT_MAX) : raw.phrase,
     conversionId: typeof raw.conversionId === "string" ? raw.conversionId.slice(0, 80) : "local",
     blankStart: Number(raw.blankStart ?? 0),
     blankEnd: Number(raw.blankEnd ?? raw.phrase.length),
@@ -69,43 +77,17 @@ function asItem(id: string, raw: Record<string, unknown>): WordbookItem | null {
   };
 }
 
-export function selectWordTokens(selected: Token[], sentenceTokens: Token[] = selected): Token[] {
-  const words = selected.filter((token) => token.isWord);
-  if (words.length !== selected.length || words.length < 1 || words.length > 6) {
-    throw new Error("只能存 1 到 6 个连续单词");
-  }
-  const ids = new Set(words.map((token) => token.id));
-  const wordIds = sentenceTokens.filter((token) => token.isWord).map((token) => token.id);
-  const positions = words.map((token) => wordIds.indexOf(token.id)).sort((a, b) => a - b);
-  if (positions.some((index) => index < 0)) throw new Error("只能存 1 到 6 个连续单词");
-  for (let i = 1; i < positions.length; i += 1) {
-    if (positions[i] !== positions[i - 1] + 1) throw new Error("只能存 1 到 6 个连续单词");
-  }
-  return wordIds.slice(positions[0], positions[positions.length - 1] + 1).map((id) => {
-    const token = sentenceTokens.find((item) => item.id === id);
-    if (!token?.isWord) throw new Error("只能存 1 到 6 个连续单词");
-    return token;
-  });
-}
-
-export function phraseFromTokens(tokens: Token[]): { phrase: string; lemmaKey: string; start: number; end: number } {
-  const words = tokens.filter((token) => token.isWord);
-  const phrase = words.map((token) => token.surface).join(" ").trim();
-  const lemmaKey = slugLemma(words.map((token) => token.lemma || token.surface).join(" "));
-  const { start, end } = offsetsFromTokens(words);
-  return { phrase, lemmaKey, start, end };
-}
-
 async function writeLocal(uid: string, items: WordbookItem[]): Promise<void> {
   await AsyncStorage.setItem(localKey(uid), JSON.stringify(items));
 }
 
 function toFirestore(item: WordbookItem): Record<string, unknown> {
   return {
-    phrase: item.phrase.slice(0, 180),
+    phrase: item.phrase.slice(0, PHRASE_MAX),
     ipa: item.ipa.slice(0, 80),
     senses: item.senses.slice(0, 3),
-    sentenceContext: item.sentenceContext.slice(0, 760),
+    simpleEn: item.simpleEn.slice(0, SENTENCE_CONTEXT_MAX),
+    sentenceContext: item.sentenceContext.slice(0, SENTENCE_CONTEXT_MAX),
     conversionId: item.conversionId.slice(0, 80) || "local",
     blankStart: item.blankStart,
     blankEnd: item.blankEnd,
@@ -198,27 +180,25 @@ export async function saveToWordbook(
     conversionId: string;
     ipa: string;
     senses: string[];
+    simpleEn?: string;
   }
 ): Promise<{ items: WordbookItem[]; created: boolean; item: WordbookItem }> {
-  const words = selectWordTokens(input.tokens, input.sentenceTokens ?? input.tokens);
-  const { phrase, lemmaKey, start, end } = phraseFromTokens(words);
-  if (!phrase) throw new Error("没有可保存的词");
-  const existing = current.find((item) => item.id === lemmaKey);
+  const draft = wordbookDraftFromSelection(input);
+  const existing = current.find((item) => item.id === draft.lemmaKey);
   if (existing) {
     return { items: current, created: false, item: existing };
   }
-  const sentenceText = input.sentenceText.slice(0, 760);
-  const span = resolveBlankSpan(sentenceText, phrase, start, end);
   const now = Date.now();
   const item: WordbookItem = {
-    id: lemmaKey,
-    phrase: phrase.slice(0, 180),
-    ipa: input.ipa.slice(0, 80),
-    senses: input.senses.slice(0, 3),
-    sentenceContext: sentenceText,
-    conversionId: (input.conversionId || "local").slice(0, 80),
-    blankStart: span.start,
-    blankEnd: span.end,
+    id: draft.lemmaKey,
+    phrase: draft.phrase,
+    ipa: draft.ipa,
+    senses: draft.senses,
+    simpleEn: draft.simpleEn,
+    sentenceContext: draft.sentenceContext,
+    conversionId: draft.conversionId,
+    blankStart: draft.blankStart,
+    blankEnd: draft.blankEnd,
     createdAt: now,
     dueAt: now,
     box: 0,
@@ -230,7 +210,7 @@ export async function saveToWordbook(
   const items = [item, ...current];
   await writeLocal(uid, items);
   try {
-    await setDoc(doc(db, "users", uid, "wordbook", lemmaKey), toFirestore({ ...item, syncState: "synced" }));
+    await setDoc(doc(db, "users", uid, "wordbook", item.id), toFirestore({ ...item, syncState: "synced" }));
     item.syncState = "synced";
     const synced = items.map((row) => (row.id === item.id ? item : row));
     await writeLocal(uid, synced);

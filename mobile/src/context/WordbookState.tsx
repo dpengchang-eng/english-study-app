@@ -9,6 +9,7 @@ type SavePhraseInput = {
   conversionId: string;
   ipa: string;
   senses: string[];
+  simpleEn?: string;
 };
 
 type WordbookValue = {

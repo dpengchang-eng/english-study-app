@@ -4,15 +4,21 @@ import { describe, it } from "node:test";
 import type { WordbookItem } from "../types";
 import {
   calendarDayKey,
+  clozeHydrateKey,
   dottedDayKeys,
   dueLabel,
   itemsOnCalendarDay,
   monthCells,
+  pickClozeItems,
   practiceSourceItems,
   seoulDayKey,
   seoulDayStartMs,
   shiftMonth,
-  todayReviewCount
+  shouldRetryClozeHydrate,
+  snapDisplayedMonth,
+  snapSelectedDayToToday,
+  todayReviewCount,
+  waitForClozeHydrate
 } from "./reviewCalendar";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -141,6 +147,79 @@ describe("createPractice list", () => {
       source.map((row) => row.id),
       ["sooner", "later"]
     );
+  });
+});
+
+describe("midnight selected-day snap", () => {
+  it("snaps yesterday or earlier to today and leaves a future day", () => {
+    const todayNow = Date.parse("2026-08-16T00:05:00+09:00");
+    assert.equal(seoulDayKey(new Date(todayNow)), "2026-08-16");
+    assert.equal(snapSelectedDayToToday("2026-08-15", todayNow), "2026-08-16");
+    assert.equal(snapSelectedDayToToday("2026-08-10", todayNow), "2026-08-16");
+    assert.equal(snapSelectedDayToToday("2026-08-16", todayNow), "2026-08-16");
+    assert.equal(snapSelectedDayToToday("2026-08-20", todayNow), "2026-08-20");
+  });
+
+  it("snaps a stale month after rollover and leaves a future month", () => {
+    const sepNow = Date.parse("2026-09-01T00:05:00+09:00");
+    assert.deepEqual(snapDisplayedMonth(2026, 8, sepNow), { year: 2026, month: 9 });
+    assert.deepEqual(snapDisplayedMonth(2026, 7, sepNow), { year: 2026, month: 9 });
+    assert.deepEqual(snapDisplayedMonth(2026, 9, sepNow), { year: 2026, month: 9 });
+    assert.deepEqual(snapDisplayedMonth(2026, 10, sepNow), { year: 2026, month: 10 });
+    assert.deepEqual(snapDisplayedMonth(2025, 12, sepNow), { year: 2026, month: 9 });
+  });
+
+  it("refreshes selectedDay and the month grid on 复习 focus after midnight", () => {
+    const review = readFileSync(new URL("../screens/ReviewScreen.tsx", import.meta.url), "utf8");
+    const calendar = readFileSync(new URL("../components/MonthCalendar.tsx", import.meta.url), "utf8");
+    assert.match(review, /snapSelectedDayToToday/);
+    assert.match(review, /useFocusEffect/);
+    assert.match(review, /snapStaleMonth/);
+    assert.match(calendar, /snapDisplayedMonth/);
+    assert.match(calendar, /snapStaleMonth/);
+  });
+});
+
+describe("cloze hydrate retry", () => {
+  it("waits while itemIds are set and the wordbook is still empty", () => {
+    assert.equal(waitForClozeHydrate(["later"], []), true);
+    assert.equal(waitForClozeHydrate(["later"], [item("other", 1)]), false);
+    assert.equal(waitForClozeHydrate(undefined, []), false);
+    assert.equal(waitForClozeHydrate([], []), false);
+    assert.equal(clozeHydrateKey(["later"], []), "pending");
+  });
+
+  it("rebuilds from the passed ids after a later hydrate and does not requery due now", () => {
+    const now = Date.parse("2026-08-15T10:00:00+09:00");
+    const due = item("due", now - 60_000);
+    const later = item("later", now + 3 * DAY);
+    const emptySession = { cards: [] };
+
+    assert.equal(shouldRetryClozeHydrate(["later"], [], emptySession), false);
+    assert.equal(shouldRetryClozeHydrate(["later"], [due, later], null), false);
+    assert.equal(shouldRetryClozeHydrate(["later"], [due, later], emptySession), true);
+    assert.equal(shouldRetryClozeHydrate(["later"], [due, later], { cards: [{ id: "x" }] }), false);
+    assert.equal(shouldRetryClozeHydrate(undefined, [due, later], emptySession), false);
+
+    const picked = pickClozeItems([due, later], ["later"]);
+    assert.deepEqual(
+      picked.map((row) => row.id),
+      ["later"]
+    );
+    assert.equal(
+      picked.some((row) => row.id === "due"),
+      false
+    );
+    assert.equal(clozeHydrateKey(["later"], [due, later]), "ready:later");
+  });
+
+  it("retries hydrate in Cloze and does not restore queryDueWordbook", () => {
+    const cloze = readFileSync(new URL("../screens/ClozeScreen.tsx", import.meta.url), "utf8");
+    assert.match(cloze, /clozeHydrateKey/);
+    assert.match(cloze, /waitForClozeHydrate/);
+    assert.match(cloze, /pickClozeItems/);
+    assert.match(cloze, /practiceSourceItems/);
+    assert.doesNotMatch(cloze, /queryDueWordbook/);
   });
 });
 

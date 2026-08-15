@@ -5,7 +5,7 @@ import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
 import { blankParts, clearPracticeAnswers, createPractice, type PracticeSession, submitPractice } from "../services/practice";
-import { practiceSourceItems } from "../services/reviewCalendar";
+import { clozeHydrateKey, pickClozeItems, practiceSourceItems, waitForClozeHydrate } from "../services/reviewCalendar";
 import { colors, space } from "../theme";
 import type { PracticeCard } from "../types";
 
@@ -27,6 +27,7 @@ export function ClozeScreen() {
   const { items, syncItems } = useWordbook();
   const itemIds = route.params?.itemIds;
   const itemIdsKey = itemIds?.join("\0") ?? "";
+  const hydrateKey = clozeHydrateKey(itemIds, items);
   const [session, setSession] = useState<PracticeSession | null>(null);
   const [index, setIndex] = useState(0);
   const [draft, setDraft] = useState("");
@@ -43,9 +44,14 @@ export function ClozeScreen() {
     const hang = setTimeout(() => {
       if (live) setSession((current) => current ?? { sessionId: "local", cards: [] });
     }, 10_000);
-    const picked = itemIds?.length
-      ? itemsRef.current.filter((item) => itemIds.includes(item.id))
-      : itemsRef.current.filter((item) => item.dueAt <= Date.now());
+    if (waitForClozeHydrate(itemIds, itemsRef.current)) {
+      return () => {
+        live = false;
+        clearTimeout(hang);
+        clearPracticeAnswers();
+      };
+    }
+    const picked = pickClozeItems(itemsRef.current, itemIds);
     void createPractice(uid, practiceSourceItems(picked))
       .then((next) => {
         if (live) setSession(next);
@@ -59,7 +65,7 @@ export function ClozeScreen() {
       clearTimeout(hang);
       clearPracticeAnswers();
     };
-  }, [itemIds, itemIdsKey, uid]);
+  }, [hydrateKey, itemIds, itemIdsKey, uid]);
 
   if (session === null) {
     return (

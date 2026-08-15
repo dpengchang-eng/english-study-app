@@ -104,3 +104,58 @@ export function monthCells(year: number, month: number): MonthCell[] {
 export function practiceSourceItems(items: WordbookItem[]): WordbookItem[] {
   return [...items].sort((a, b) => a.dueAt - b.dueAt);
 }
+
+/**
+ * Review tab stays mounted. If the selected day is yesterday or earlier,
+ * snap to today so overdue items are not stuck on an empty past day.
+ * A future day the user picked stays.
+ */
+export function snapSelectedDayToToday(selectedDay: string, now: number): string {
+  const today = seoulDayKey(new Date(now));
+  return selectedDay < today ? today : selectedDay;
+}
+
+/**
+ * After a Seoul month rollover the grid can still show last month.
+ * Past months snap to the current month. A future month the user opened stays.
+ */
+export function snapDisplayedMonth(year: number, month: number, now: number): { year: number; month: number } {
+  const current = yearMonthOf(now);
+  if (year < current.year || (year === current.year && month < current.month)) return current;
+  return { year, month };
+}
+
+/** Use the passed ids when set. Does not re-query due-now. */
+export function pickClozeItems(items: WordbookItem[], itemIds?: readonly string[]): WordbookItem[] {
+  if (itemIds?.length) {
+    const want = new Set(itemIds);
+    return items.filter((item) => want.has(item.id));
+  }
+  return items.filter((item) => item.dueAt <= Date.now());
+}
+
+/** Wordbook starts as [] then hydrates. Do not build an empty cloze yet. */
+export function waitForClozeHydrate(itemIds: readonly string[] | undefined, items: WordbookItem[]): boolean {
+  return Boolean(itemIds?.length && items.length === 0);
+}
+
+/**
+ * Rebuild when itemIds were set, the first pick was empty, and items later
+ * contain those ids. Does not mean "query due now".
+ */
+export function shouldRetryClozeHydrate(
+  itemIds: readonly string[] | undefined,
+  items: WordbookItem[],
+  session: { cards: readonly unknown[] } | null
+): boolean {
+  if (!itemIds?.length) return false;
+  if (session === null || session.cards.length > 0) return false;
+  return pickClozeItems(items, itemIds).length > 0;
+}
+
+/** Effect key: pending while [], then the matched ids so a later hydrate retries. */
+export function clozeHydrateKey(itemIds: readonly string[] | undefined, items: WordbookItem[]): string {
+  if (!itemIds?.length) return "noids";
+  if (waitForClozeHydrate(itemIds, items)) return "pending";
+  return `ready:${pickClozeItems(items, itemIds).map((item) => item.id).join("\0")}`;
+}

@@ -115,7 +115,11 @@ describe("month grid", () => {
     const cells = monthCells(2026, 8);
     assert.equal(cells[0], null);
     assert.deepEqual(cells[6], { dayKey: "2026-08-01", day: 1 });
-    assert.deepEqual(cells.at(-1), { dayKey: "2026-08-31", day: 31 });
+    assert.deepEqual(
+      cells.find((cell) => cell?.day === 31),
+      { dayKey: "2026-08-31", day: 31 }
+    );
+    assert.equal(cells.length % 7, 0);
     assert.deepEqual(shiftMonth(2026, 1, -1), { year: 2025, month: 12 });
     assert.deepEqual(shiftMonth(2026, 12, 1), { year: 2027, month: 1 });
   });

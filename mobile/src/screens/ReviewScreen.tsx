@@ -7,7 +7,7 @@ import { MonthCalendar } from "../components/MonthCalendar";
 import { useWordbook } from "../context/WordbookState";
 import { openCloze } from "../navigation/rootNav";
 import type { TabParamList } from "../navigation/types";
-import { dottedDayKeys, itemsOnCalendarDay, seoulDayKey, snapSelectedDayToToday, todayReviewCount } from "../services/reviewCalendar";
+import { dottedDayKeys, dueLabel, itemsOnCalendarDay, seoulDayKey, snapSelectedDayToToday, todayReviewCount } from "../services/reviewCalendar";
 import { colors, space } from "../theme";
 import type { WordbookItem } from "../types";
 
@@ -67,7 +67,14 @@ export function ReviewScreen() {
           ) : (
             <>
               {dayItems.map((item) => (
-                <ReviewRow key={item.id} item={item} checked={checked.has(item.id)} onToggle={() => toggle(item.id)} />
+                <ReviewRow
+                  key={item.id}
+                  item={item}
+                  now={now}
+                  checked={checked.has(item.id)}
+                  onToggle={() => toggle(item.id)}
+                  onPractice={() => openCloze([item.id])}
+                />
               ))}
               {checkedItems.length > 0 ? (
                 <Pressable style={styles.btn} onPress={startCloze}>
@@ -82,17 +89,28 @@ export function ReviewScreen() {
   );
 }
 
-function ReviewRow({ item, checked, onToggle }: { item: WordbookItem; checked: boolean; onToggle: () => void }) {
+function ReviewRow({
+  item,
+  now,
+  checked,
+  onToggle,
+  onPractice
+}: {
+  item: WordbookItem;
+  now: number;
+  checked: boolean;
+  onToggle: () => void;
+  onPractice: () => void;
+}) {
   return (
-    <Pressable style={styles.row} onPress={onToggle} accessibilityRole="checkbox" accessibilityState={{ checked }}>
-      <View style={[styles.box, checked && styles.boxOn]}>
-        {checked ? <Text style={styles.check}>✓</Text> : null}
-      </View>
-      <View style={styles.body}>
-        <Text style={styles.phrase}>{item.phrase}</Text>
-        <Text style={styles.sense}>{item.senses.join(" · ") || "暂无释义"}</Text>
-      </View>
-    </Pressable>
+    <View style={styles.row}>
+      <Pressable onPress={onToggle} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked }}>
+        <View style={[styles.box, checked && styles.boxOn]}>{checked ? <Text style={styles.check}>✓</Text> : null}</View>
+      </Pressable>
+      <Pressable style={styles.body} onPress={onPractice}>
+        <Text style={styles.due}>{dueLabel(item.dueAt, now)}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -121,9 +139,8 @@ const styles = StyleSheet.create({
   },
   boxOn: { backgroundColor: colors.accent },
   check: { color: "#fff", fontSize: 14, fontWeight: "800", lineHeight: 16 },
-  body: { flex: 1, gap: 2 },
-  phrase: { fontSize: 17, fontWeight: "700", color: colors.ink },
-  sense: { color: colors.muted, fontSize: 14 },
+  body: { flex: 1 },
+  due: { color: colors.muted, fontSize: 15 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 14, alignItems: "center" },
   btnText: { color: "#fff", fontWeight: "700", fontSize: 16 }
 });

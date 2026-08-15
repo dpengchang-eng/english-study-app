@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Token, WordbookItem } from "../types";
 import { blankParts, offsetsFromTokens, resolveBlankSpan } from "./blank";
+import { clozeAnswerLine } from "./practice";
 import { applyBox, nextGoodBox } from "./practiceSrs";
 import { wordbookDraftFromSelection } from "./wordbookSelect";
 
@@ -47,6 +48,34 @@ describe("blankParts", () => {
     );
     assert.equal(before, "I went out for ");
     assert.equal(after, " with my family tonight.");
+  });
+
+  it("blanks a one-word item and a short word", () => {
+    const one = "I went out for dinner with my family tonight.";
+    const oneSpan = resolveBlankSpan(one, "dinner", 0, 0);
+    assert.equal(one.slice(oneSpan.start, oneSpan.end), "dinner");
+
+    const short = "I ate a pear.";
+    const aSpan = resolveBlankSpan(short, "a", 0, 0);
+    assert.equal(short.slice(aSpan.start, aSpan.end), "a");
+    assert.equal(aSpan.start, short.indexOf(" a ") + 1);
+
+    const toText = "I like to cook.";
+    const toSpan = resolveBlankSpan(toText, "to", 0, 1);
+    assert.equal(toText.slice(toSpan.start, toSpan.end), "to");
+  });
+});
+
+describe("clozeAnswerLine", () => {
+  it("joins phrase, up to 3 Chinese senses, and simpleEn on one line", () => {
+    assert.equal(
+      clozeAnswerLine({
+        phrase: "dinner",
+        senses: ["晚饭", "正餐", "宴会", "多余"],
+        simpleEn: "Dinner is the evening meal."
+      }),
+      "dinner  晚饭 · 正餐 · 宴会  Dinner is the evening meal."
+    );
   });
 });
 

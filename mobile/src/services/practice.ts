@@ -12,6 +12,12 @@ export { applyBox, nextGoodBox } from "./practiceSrs";
 
 export { blankedText, blankParts, FIXED_BLANK, resolveBlankSpan } from "./blank";
 
+/** After a submit (correct or reveal): phrase + up to 3 Chinese senses + simpleEn, one line. */
+export function clozeAnswerLine(item: { phrase: string; senses: readonly string[]; simpleEn: string }): string {
+  const zh = item.senses.map((sense) => sense.trim()).filter(Boolean).slice(0, 3).join(" · ");
+  return [item.phrase.trim(), zh, item.simpleEn.trim()].filter(Boolean).join("  ");
+}
+
 export type PracticeSession = {
   sessionId: string;
   cards: PracticeCard[];

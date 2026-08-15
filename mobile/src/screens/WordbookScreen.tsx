@@ -1,16 +1,32 @@
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import { EmptyHint } from "../components/EmptyHint";
+import { MonthCalendar } from "../components/MonthCalendar";
 import { useWordbook } from "../context/WordbookState";
 import type { TabParamList } from "../navigation/types";
+import { dottedDayKeys, dueLabel, itemsOnCalendarDay } from "../services/reviewCalendar";
 import { colors, space } from "../theme";
 import type { WordbookItem } from "../types";
 
 export function WordbookScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>();
   const { items, deletePhrase } = useWordbook();
+  const [now, setNow] = useState(() => Date.now());
+  useFocusEffect(
+    useCallback(() => {
+      setNow(Date.now());
+    }, [])
+  );
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const dots = useMemo(() => dottedDayKeys(items, now), [items, now]);
+  const visible = selectedDay ? itemsOnCalendarDay(items, selectedDay, now) : items;
+
+  const toggleDay = (dayKey: string): void => {
+    setSelectedDay((current) => (current === dayKey ? null : dayKey));
+  };
 
   if (items.length === 0) {
     return (
@@ -25,7 +41,8 @@ export function WordbookScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.list}>
-      {items.map((item) => (
+      <MonthCalendar selectedDay={selectedDay} dottedDays={dots} onPressDay={toggleDay} now={now} />
+      {visible.map((item) => (
         <Swipeable
           key={item.id}
           overshootRight={false}
@@ -35,14 +52,14 @@ export function WordbookScreen() {
             </Pressable>
           )}
         >
-          <WordRow item={item} />
+          <WordRow item={item} now={now} />
         </Swipeable>
       ))}
     </ScrollView>
   );
 }
 
-function WordRow({ item }: { item: WordbookItem }) {
+function WordRow({ item, now }: { item: WordbookItem; now: number }) {
   return (
     <View style={styles.card}>
       <Text style={styles.phrase}>{item.phrase}</Text>
@@ -51,6 +68,7 @@ function WordRow({ item }: { item: WordbookItem }) {
       <Text style={styles.ctx} numberOfLines={2}>
         {item.sentenceContext}
       </Text>
+      <Text style={styles.due}>{dueLabel(item.dueAt, now)}</Text>
       {item.syncState !== "synced" ? <Text style={styles.sync}>未同步到云</Text> : null}
     </View>
   );
@@ -71,6 +89,7 @@ const styles = StyleSheet.create({
   ipa: { color: colors.muted },
   sense: { color: colors.ink, fontSize: 15 },
   ctx: { color: colors.muted, fontSize: 13 },
+  due: { color: colors.muted, fontSize: 12, marginTop: 2 },
   sync: { color: colors.warn, fontSize: 13, marginTop: 2 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 14, alignItems: "center" },
   btnText: { color: "#fff", fontWeight: "700", fontSize: 16 },

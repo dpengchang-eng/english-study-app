@@ -7,7 +7,7 @@ import { MonthCalendar } from "../components/MonthCalendar";
 import { useWordbook } from "../context/WordbookState";
 import { openCloze } from "../navigation/rootNav";
 import type { TabParamList } from "../navigation/types";
-import { dottedDayKeys, itemsOnCalendarDay, seoulDayKey, todayReviewCount } from "../services/reviewCalendar";
+import { dottedDayKeys, itemsOnCalendarDay, seoulDayKey, snapSelectedDayToToday, todayReviewCount } from "../services/reviewCalendar";
 import { colors, space } from "../theme";
 import type { WordbookItem } from "../types";
 
@@ -15,12 +15,14 @@ export function ReviewScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>();
   const { items } = useWordbook();
   const [now, setNow] = useState(() => Date.now());
+  const [selectedDay, setSelectedDay] = useState(() => seoulDayKey(new Date()));
   useFocusEffect(
     useCallback(() => {
-      setNow(Date.now());
+      const nextNow = Date.now();
+      setNow(nextNow);
+      setSelectedDay((current) => snapSelectedDayToToday(current, nextNow));
     }, [])
   );
-  const [selectedDay, setSelectedDay] = useState(() => seoulDayKey(new Date()));
   const dots = useMemo(() => dottedDayKeys(items, now), [items, now]);
   const dayItems = useMemo(() => itemsOnCalendarDay(items, selectedDay, now), [items, now, selectedDay]);
   const todayCount = todayReviewCount(items, now);
@@ -49,7 +51,7 @@ export function ReviewScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <MonthCalendar selectedDay={selectedDay} dottedDays={dots} onPressDay={setSelectedDay} now={now} />
+      <MonthCalendar selectedDay={selectedDay} dottedDays={dots} onPressDay={setSelectedDay} now={now} snapStaleMonth />
       {items.length === 0 ? (
         <>
           <EmptyHint text="先存词" />

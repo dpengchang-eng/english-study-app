@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { monthCells, seoulDayKey, shiftMonth, yearMonthOf } from "../services/reviewCalendar";
+import { monthCells, seoulDayKey, shiftMonth, snapDisplayedMonth, yearMonthOf } from "../services/reviewCalendar";
 import { colors, space } from "../theme";
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
@@ -9,16 +9,22 @@ export function MonthCalendar({
   selectedDay,
   dottedDays,
   onPressDay,
-  now = Date.now()
+  now = Date.now(),
+  snapStaleMonth = false
 }: {
   selectedDay: string | null;
   dottedDays: ReadonlySet<string>;
   onPressDay: (dayKey: string) => void;
   now?: number;
+  snapStaleMonth?: boolean;
 }) {
   const today = seoulDayKey(new Date(now));
   const start = yearMonthOf(now);
   const [{ year, month }, setMonth] = useState(start);
+  useEffect(() => {
+    if (!snapStaleMonth) return;
+    setMonth((current) => snapDisplayedMonth(current.year, current.month, now));
+  }, [now, snapStaleMonth]);
   const cells = monthCells(year, month);
 
   return (

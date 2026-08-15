@@ -2,13 +2,14 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import {
+  currentPlay,
   indexById,
   nextPlayIndex,
   resolveStartIndex,
   speakableItems,
   type ArticlePlayMode
 } from "../services/articleSpeech";
-import { type SpeechSpeed } from "../services/speechSpeed";
+import { peekSpeechSpeed, type SpeechSpeed } from "../services/speechSpeed";
 import { continueSpeaking, speakAmerican, stopSpeaking, type SpeakHandlers } from "../services/tts";
 
 export type ArticleSpeechMode = ArticlePlayMode | "idle";
@@ -17,7 +18,7 @@ export function useArticleSpeech(
   sentences: Array<{ id: string; text: string }>,
   onError: () => void,
   resetKey?: string,
-  speed: SpeechSpeed = 1
+  speed: SpeechSpeed = peekSpeechSpeed()
 ): {
   mode: ArticleSpeechMode;
   playingId: string | null;
@@ -36,29 +37,35 @@ export function useArticleSpeech(
   const sessionRef = useRef(0);
   const speedRef = useRef(speed);
   speedRef.current = speed;
+  const modeRef = useRef<ArticleSpeechMode>("idle");
   const [mode, setMode] = useState<ArticleSpeechMode>("idle");
   const [playingId, setPlayingId] = useState<string | null>(null);
 
-  const stop = useCallback(() => {
-    sessionRef.current += 1;
+  const markIdle = useCallback(() => {
+    modeRef.current = "idle";
     setMode("idle");
     setPlayingId(null);
-    stopSpeaking();
   }, []);
+
+  const stop = useCallback(() => {
+    sessionRef.current += 1;
+    markIdle();
+    stopSpeaking();
+  }, [markIdle]);
 
   const speakAt = useCallback((session: number, playMode: ArticlePlayMode, index: number, interrupt: boolean) => {
     const list = itemsRef.current;
     const item = list[index];
     if (!item || session !== sessionRef.current) return;
     selectedIdRef.current = item.id;
+    modeRef.current = playMode;
     setPlayingId(item.id);
     setMode(playMode);
     const handlers: SpeakHandlers = {
       onError: () => {
         if (session !== sessionRef.current) return;
         sessionRef.current += 1;
-        setMode("idle");
-        setPlayingId(null);
+        markIdle();
         onErrorRef.current();
       },
       onDone: () => {
@@ -66,8 +73,7 @@ export function useArticleSpeech(
         const next = nextPlayIndex(playMode, index, list.length);
         if (next == null) {
           sessionRef.current += 1;
-          setMode("idle");
-          setPlayingId(null);
+          markIdle();
           return;
         }
         speakAt(session, playMode, next, false);
@@ -75,7 +81,7 @@ export function useArticleSpeech(
     };
     if (interrupt) speakAmerican(item.text, handlers, speedRef.current);
     else continueSpeaking(item.text, handlers, speedRef.current);
-  }, []);
+  }, [markIdle]);
 
   const start = useCallback(
     (playMode: ArticlePlayMode, selectedId?: string | null) => {
@@ -115,14 +121,13 @@ export function useArticleSpeech(
   const restartCurrent = useCallback(
     (nextSpeed?: SpeechSpeed) => {
       if (nextSpeed != null) speedRef.current = nextSpeed;
-      if (mode === "idle" || !playingId) return;
-      const index = indexById(itemsRef.current, playingId);
-      if (index == null) return;
+      const play = currentPlay(modeRef.current, selectedIdRef.current, itemsRef.current);
+      if (!play) return;
       sessionRef.current += 1;
       stopSpeaking();
-      speakAt(sessionRef.current, mode, index, true);
+      speakAt(sessionRef.current, play.mode, play.index, true);
     },
-    [mode, playingId, speakAt]
+    [speakAt]
   );
 
   const loopOne = useCallback(

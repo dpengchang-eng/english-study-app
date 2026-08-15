@@ -10,6 +10,18 @@ export function indexById(items: Array<{ id: string }>, id: string | null | unde
   return index >= 0 ? index : null;
 }
 
+/** Change speed: stay on this sentence and this mode, or do nothing if idle. */
+export function currentPlay(
+  mode: ArticlePlayMode | "idle",
+  selectedId: string | null,
+  items: Array<{ id: string }>
+): { mode: ArticlePlayMode; index: number } | null {
+  if (mode === "idle" || !selectedId) return null;
+  const index = indexById(items, selectedId);
+  if (index == null) return null;
+  return { mode, index };
+}
+
 /** 听 / 循环 start on that sentence. 听全文 / 复读 start at sentence 1. */
 export function resolveStartIndex(
   mode: ArticlePlayMode,

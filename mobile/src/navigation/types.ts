@@ -21,7 +21,7 @@ export type RootStackParamList = {
     conversionId: string;
     sentenceId?: string;
   };
-  Cloze: undefined;
+  Cloze: { itemIds?: string[] };
 };
 
 export type LookupParams = RootStackParamList["Lookup"];

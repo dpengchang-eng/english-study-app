@@ -5,7 +5,8 @@ import type { PracticeCard, SubmitPracticeResult, WordbookItem } from "../types"
 import { resolveBlankSpan } from "./blank";
 import { acceptedAnswers, answerFromSources, isCorrectGuess, type StoredAnswer } from "./practiceGrade";
 import { applyBox, nextGoodBox } from "./practiceSrs";
-import { queryDueWordbook, updateWordbookSrs } from "./wordbook";
+import { practiceSourceItems } from "./reviewCalendar";
+import { updateWordbookSrs } from "./wordbook";
 
 export { applyBox, nextGoodBox } from "./practiceSrs";
 
@@ -54,8 +55,7 @@ async function readRemoteAnswerKey(uid: string, sessionId: string): Promise<Reco
 export async function createPractice(uid: string, items: WordbookItem[]): Promise<PracticeSession> {
   try {
     memory.clear();
-    const due = await queryDueWordbook(uid);
-    const source = due.length ? due : items.filter((item) => item.dueAt <= Date.now()).sort((a, b) => a.dueAt - b.dueAt);
+    const source = practiceSourceItems(items);
     const answerKey: Record<string, StoredAnswer> = {};
     const cards: PracticeCard[] = source.map((item) => {
       const span = resolveBlankSpan(item.sentenceContext, item.phrase, item.blankStart, item.blankEnd);

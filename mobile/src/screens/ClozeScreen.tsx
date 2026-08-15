@@ -1,9 +1,11 @@
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
+import type { RootStackParamList } from "../navigation/types";
 import { blankParts, clearPracticeAnswers, createPractice, type PracticeSession, submitPractice } from "../services/practice";
+import { practiceSourceItems } from "../services/reviewCalendar";
 import { colors, space } from "../theme";
 import type { PracticeCard } from "../types";
 
@@ -20,8 +22,11 @@ function ClozeSentence({ card, phrase }: { card: PracticeCard; phrase?: string }
 
 export function ClozeScreen() {
   const navigation = useNavigation();
+  const route = useRoute<RouteProp<RootStackParamList, "Cloze">>();
   const { uid } = useAppState();
   const { items, syncItems } = useWordbook();
+  const itemIds = route.params?.itemIds;
+  const itemIdsKey = itemIds?.join("\0") ?? "";
   const [session, setSession] = useState<PracticeSession | null>(null);
   const [index, setIndex] = useState(0);
   const [draft, setDraft] = useState("");
@@ -38,7 +43,10 @@ export function ClozeScreen() {
     const hang = setTimeout(() => {
       if (live) setSession((current) => current ?? { sessionId: "local", cards: [] });
     }, 10_000);
-    void createPractice(uid, itemsRef.current)
+    const picked = itemIds?.length
+      ? itemsRef.current.filter((item) => itemIds.includes(item.id))
+      : itemsRef.current.filter((item) => item.dueAt <= Date.now());
+    void createPractice(uid, practiceSourceItems(picked))
       .then((next) => {
         if (live) setSession(next);
       })
@@ -51,7 +59,7 @@ export function ClozeScreen() {
       clearTimeout(hang);
       clearPracticeAnswers();
     };
-  }, [uid]);
+  }, [itemIds, itemIdsKey, uid]);
 
   if (session === null) {
     return (

@@ -5,7 +5,7 @@ export const rootNav = createNavigationContainerRef<RootStackParamList>();
 
 type PendingNav =
   | { screen: "Lookup"; params: RootStackParamList["Lookup"] }
-  | { screen: "Cloze" };
+  | { screen: "Cloze"; params: RootStackParamList["Cloze"] };
 
 let pending: PendingNav | null = null;
 
@@ -17,7 +17,7 @@ export function flushRootNav(): void {
     rootNav.navigate("Lookup", next.params);
     return;
   }
-  rootNav.navigate("Cloze");
+  rootNav.navigate("Cloze", next.params);
 }
 
 export function openLookup(params: RootStackParamList["Lookup"]): void {
@@ -28,10 +28,11 @@ export function openLookup(params: RootStackParamList["Lookup"]): void {
   pending = { screen: "Lookup", params };
 }
 
-export function openCloze(): void {
+export function openCloze(itemIds: string[]): void {
+  const params = { itemIds };
   if (rootNav.isReady()) {
-    rootNav.navigate("Cloze");
+    rootNav.navigate("Cloze", params);
     return;
   }
-  pending = { screen: "Cloze" };
+  pending = { screen: "Cloze", params };
 }

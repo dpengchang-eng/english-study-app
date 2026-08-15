@@ -36,6 +36,7 @@ export type WordbookItem = {
   phrase: string;
   ipa: string;
   senses: string[];
+  simpleEn: string;
   sentenceContext: string;
   conversionId: string;
   blankStart: number;
@@ -48,6 +49,10 @@ export type WordbookItem = {
   reviewCount: number;
   syncState: "synced" | "pending" | "error";
 };
+
+/** Phrase and sentenceContext share this cap so a full sentence can be saved. */
+export const SENTENCE_CONTEXT_MAX = 760;
+export const PHRASE_MAX = SENTENCE_CONTEXT_MAX;
 
 export type PracticeCard = {
   wordbookItemId: string;

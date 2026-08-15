@@ -25,17 +25,6 @@ import { SPEAK_FAIL_TEXT } from "../services/tts";
 import { colors, space } from "../theme";
 import { convertWaitLeftMs, type Sentence, type Token } from "../types";
 
-function consecutiveWords(tokens: Token[], a: Token, b: Token): Token[] | null {
-  const words = tokens.filter((token) => token.isWord);
-  const i = words.findIndex((token) => token.id === a.id);
-  const j = words.findIndex((token) => token.id === b.id);
-  if (i < 0 || j < 0) return null;
-  const from = Math.min(i, j);
-  const to = Math.max(i, j);
-  if (to - from + 1 > 6) return null;
-  return words.slice(from, to + 1);
-}
-
 export function ResultScreen() {
   const route = useRoute<RouteProp<ConvertStackParamList, "Result">>();
   const navigation = useNavigation<NativeStackNavigationProp<ConvertStackParamList>>();
@@ -47,7 +36,6 @@ export function ResultScreen() {
     tokens: ensureTappableTokens(sentence)
   }));
   const [copied, setCopied] = useState(false);
-  const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
   const [speakError, setSpeakError] = useState<string | null>(null);
   const [speed, setSpeed] = useState<SpeechSpeed>(peekSpeechSpeed);
   const speedHold = useRef<SpeechSpeed>(speed);
@@ -139,30 +127,23 @@ export function ResultScreen() {
     restartCurrent(next);
   };
 
-  const openTokens = (sentence: Sentence, tokens: Token[]): void => {
+  const openTokens = (sentence: Sentence, token: Token): void => {
     stop();
-    setPicked(null);
     openLookup({
-      tokens,
-      sentenceTokens: sentence.tokens ?? tokens,
+      tokens: [token],
+      sentenceTokens: sentence.tokens ?? [token],
       sentenceText: sentence.text,
-      conversionId: conversion.id
+      conversionId: conversion.id,
+      sentenceId: sentence.id
     });
   };
 
   const onTapToken = (sentence: Sentence, token: Token): void => {
-    if (picked && picked.sentence.id === sentence.id) {
-      const span = consecutiveWords(sentence.tokens ?? [], picked.tokens[0], token);
-      if (span && span.length > 1) {
-        setPicked({ sentence, tokens: span });
-        return;
-      }
-    }
-    openTokens(sentence, [token]);
+    openTokens(sentence, token);
   };
 
   const onLongPressToken = (sentence: Sentence, token: Token): void => {
-    setPicked({ sentence, tokens: [token] });
+    openTokens(sentence, token);
   };
 
   return (
@@ -203,7 +184,6 @@ export function ResultScreen() {
       {conversion.status === "ready" ? (
         <SentenceList
           sentences={sentences}
-          selectedIds={picked?.tokens.map((token) => token.id)}
           playingId={playingId}
           listenMode={mode}
           onPlay={play}
@@ -211,13 +191,6 @@ export function ResultScreen() {
           onTapToken={onTapToken}
           onLongPressToken={onLongPressToken}
         />
-      ) : null}
-      {picked ? (
-        <Pressable style={styles.phrase} onPress={() => openTokens(picked.sentence, picked.tokens)}>
-          <Text style={styles.phraseText}>
-            保存短语：{picked.tokens.map((token) => token.surface).join(" ")}
-          </Text>
-        </Pressable>
       ) : null}
       {conversion.status === "ready" ? (
         <View style={styles.actions}>
@@ -237,8 +210,6 @@ const styles = StyleSheet.create({
   page: { padding: space.md, paddingBottom: 40, gap: 16, backgroundColor: colors.bg, flexGrow: 1 },
   source: { color: colors.muted, fontSize: 14, lineHeight: 22 },
   speakError: { color: colors.warn, fontSize: 14 },
-  phrase: { backgroundColor: colors.accentSoft, borderRadius: 12, padding: 12 },
-  phraseText: { color: colors.ink, fontWeight: "700" },
   listenRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   listenText: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   listenOn: { color: colors.accent, fontWeight: "700", fontSize: 16 },

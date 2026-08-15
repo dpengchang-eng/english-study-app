@@ -19,6 +19,7 @@ export type RootStackParamList = {
     sentenceTokens?: Token[];
     sentenceText: string;
     conversionId: string;
+    sentenceId?: string;
   };
   Cloze: undefined;
 };

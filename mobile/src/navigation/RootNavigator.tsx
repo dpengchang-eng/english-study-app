@@ -79,7 +79,7 @@ export function RootNavigator() {
           options={{
             presentation: "formSheet",
             headerShown: false,
-            sheetAllowedDetents: [0.5, 0.75],
+            sheetAllowedDetents: [0.65],
             sheetGrabberVisible: true
           }}
         />

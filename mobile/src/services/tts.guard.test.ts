@@ -69,7 +69,7 @@ describe("listen tts", () => {
     assert.match(hook, /stopSpeaking/);
     assert.match(hook, /loopOne/);
     assert.match(planner, /loopOne/);
-    assert.match(result, /stop\(\);\s*setPicked\(null\);\s*openLookup/s);
+    assert.match(result, /stop\(\);\s*openLookup/s);
     assert.doesNotMatch(result, /这句/);
     assert.doesNotMatch(list, /这句/);
     assert.doesNotMatch(result, /单句循环/);

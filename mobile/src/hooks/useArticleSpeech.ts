@@ -5,6 +5,7 @@ import { rootNav } from "../navigation/rootNav";
 import {
   decideListenAction,
   indexById,
+  missingPlayItemAction,
   nextPlayIndex,
   resolveStartIndex,
   speakableItems,
@@ -53,7 +54,12 @@ export function useArticleSpeech(
   const speakAt = useCallback((session: number, playMode: ArticlePlayMode, index: number, interrupt: boolean) => {
     const list = itemsRef.current;
     const item = list[index];
-    if (!item || session !== sessionRef.current) return;
+    const gate = missingPlayItemAction(item, session, sessionRef.current);
+    if (gate === "skip") return;
+    if (gate === "stop" || !item) {
+      stop();
+      return;
+    }
     selectedIdRef.current = item.id;
     playingIdRef.current = item.id;
     modeRef.current = playMode;
@@ -85,7 +91,7 @@ export function useArticleSpeech(
     };
     if (interrupt) speakAmerican(item.text, handlers);
     else continueSpeaking(item.text, handlers);
-  }, []);
+  }, [stop]);
 
   const start = useCallback(
     (playMode: ArticlePlayMode, selectedId?: string | null) => {

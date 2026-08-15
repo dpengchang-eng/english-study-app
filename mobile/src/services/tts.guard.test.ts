@@ -50,6 +50,12 @@ describe("listen tts", () => {
     assert.match(result, /scrollTo/);
     assert.match(result, /stop\(\);\s*setPicked\(null\);\s*openLookup/s);
     assert.match(list, /onSentenceLayout/);
+    assert.match(list, /canListen/);
+    assert.match(list, /isSpeakable/);
+    assert.match(hook, /missingPlayItemAction/);
+    assert.match(hook, /gate === "stop"/);
+    assert.match(planner, /isSpeakable/);
+    assert.match(planner, /missingPlayItemAction/);
     assert.doesNotMatch(result, /这句/);
     assert.doesNotMatch(list, /这句/);
     assert.doesNotMatch(result, /单句循环/);

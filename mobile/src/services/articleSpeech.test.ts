@@ -3,11 +3,37 @@ import { describe, it } from "node:test";
 import {
   decideListenAction,
   indexById,
+  isSpeakable,
+  missingPlayItemAction,
   nextPlayIndex,
   resolveStartIndex,
   revealScrollY,
   speakableItems
 } from "./articleSpeech";
+
+describe("isSpeakable", () => {
+  it("treats blank and whitespace lines as not listen-able", () => {
+    assert.equal(isSpeakable("Hello."), true);
+    assert.equal(isSpeakable(""), false);
+    assert.equal(isSpeakable("   "), false);
+  });
+});
+
+describe("missingPlayItemAction", () => {
+  it("stops the current session when the playlist row is gone", () => {
+    assert.equal(missingPlayItemAction(undefined, 3, 3), "stop");
+    assert.equal(missingPlayItemAction(null, 1, 1), "stop");
+  });
+
+  it("ignores a stale session so a newer play is not closed", () => {
+    assert.equal(missingPlayItemAction(undefined, 2, 4), "skip");
+    assert.equal(missingPlayItemAction({ id: "s0" }, 2, 4), "skip");
+  });
+
+  it("plays when the row is still there", () => {
+    assert.equal(missingPlayItemAction({ id: "s0" }, 3, 3), "play");
+  });
+});
 
 describe("speakableItems", () => {
   it("drops blank sentences so a long article still plays the real lines", () => {

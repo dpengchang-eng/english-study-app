@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ensureTappableTokens } from "../services/align";
-import type { ArticlePlayMode } from "../services/articleSpeech";
+import { isSpeakable, type ArticlePlayMode } from "../services/articleSpeech";
 import type { Sentence, Token } from "../types";
 import { colors, space } from "../theme";
 
@@ -61,6 +61,7 @@ export function SentenceList({
         const tokens = ensureTappableTokens(sentence);
         const hasWords = tokens.some((token) => token.isWord);
         const tappable = { ...sentence, tokens };
+        const canListen = isSpeakable(sentence.text);
         return (
           <View
             key={sentence.id}
@@ -96,7 +97,7 @@ export function SentenceList({
                     <Text style={styles.plain}>{sentence.text}</Text>
                   )}
               </View>
-              {onPlay || onLoop ? (
+              {canListen && (onPlay || onLoop) ? (
                 <View style={styles.plays}>
                   {onPlay ? (
                     <Pressable

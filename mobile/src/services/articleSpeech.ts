@@ -7,8 +7,23 @@ export type ListenRequest =
   | { kind: "once"; id: string }
   | { kind: "loopOne"; id: string };
 
+export function isSpeakable(text: string): boolean {
+  return text.trim().length > 0;
+}
+
 export function speakableItems<T extends { text: string }>(items: T[]): T[] {
-  return items.filter((item) => item.text.trim().length > 0);
+  return items.filter((item) => isSpeakable(item.text));
+}
+
+/** Current session + no row: close out. Stale session: ignore. */
+export function missingPlayItemAction(
+  item: unknown,
+  session: number,
+  currentSession: number
+): "skip" | "stop" | "play" {
+  if (session !== currentSession) return "skip";
+  if (!item) return "stop";
+  return "play";
 }
 
 export function indexById(items: Array<{ id: string }>, id: string | null | undefined): number | null {

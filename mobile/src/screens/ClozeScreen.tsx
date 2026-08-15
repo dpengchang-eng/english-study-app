@@ -211,7 +211,7 @@ export function ClozeScreen() {
     }
     setMissedIds((current) => (current.includes(card.wordbookItemId) ? current : [...current, card.wordbookItemId]));
     setRevealed(true);
-    setMessage(result.expected ? `答案：${result.expected}` : "这题先跳过");
+    setMessage(result.expected ? "" : "这题先跳过");
     setBusy(false);
   };
 

@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
-import { conversionSpeakable } from "../services/homeChat";
+import { conversionSpeakable, homeListenShouldStop } from "../services/homeChat";
 import {
   loadSpeechSpeed,
   peekSpeechSpeed,
@@ -40,9 +40,10 @@ export function useHomeArticleListen(recents: Conversion[]): {
   useEffect(() => {
     if (!pendingStart.current || pendingStart.current !== listenId) return;
     if (sentences.length === 0) return;
+    if (mode !== "idle") return;
     pendingStart.current = null;
     toggle("all");
-  }, [listenId, sentences.length, toggle]);
+  }, [listenId, sentences.length, toggle, mode]);
 
   useEffect(() => {
     if (mode === "all" && listenId) playingId.current = listenId;
@@ -61,15 +62,16 @@ export function useHomeArticleListen(recents: Conversion[]): {
 
   const toggleListen = useCallback(
     (id: string) => {
-      if (listenId === id && mode === "all") {
+      if (homeListenShouldStop(listenId, id)) {
         stopListen();
         return;
       }
+      stop();
       setSpeed(peekSpeechSpeed());
       pendingStart.current = id;
       setListenId(id);
     },
-    [listenId, mode, stopListen]
+    [listenId, stop, stopListen]
   );
 
   useFocusEffect(

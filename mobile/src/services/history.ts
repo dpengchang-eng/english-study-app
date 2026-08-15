@@ -47,7 +47,10 @@ export function applyConvertResult(list: Conversion[], incoming: Conversion): Co
   if (!current) return mergeRecent(list, incoming);
   if (current.clientRequestId !== incoming.clientRequestId) return list;
   if (current.status === "ready") return list;
-  return mergeRecent(list, incoming);
+  return mergeRecent(list, {
+    ...incoming,
+    threadAt: current.threadAt ?? current.createdAt
+  });
 }
 
 /** Patch cloud sync on a ready row. Ignores a stale retry. */

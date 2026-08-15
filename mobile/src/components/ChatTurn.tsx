@@ -69,31 +69,21 @@ export function ChatTurn({
       ) : null}
       {item.status === "ready" ? (
         <View style={styles.appWrap}>
-          <Pressable style={styles.appBubble} onPress={onOpenResult}>
-            <Text style={styles.english}>{english || "—"}</Text>
+          <View style={styles.appBubble}>
+            <Pressable onPress={onOpenResult}>
+              <Text style={styles.english}>{english || "—"}</Text>
+            </Pressable>
             <View style={styles.actions}>
-              <Pressable
-                onPress={(event) => {
-                  event.stopPropagation?.();
-                  onCopy();
-                }}
-                hitSlop={8}
-              >
+              <Pressable onPress={onCopy} hitSlop={8}>
                 <Text style={styles.action}>{HOME_COPY_ACTION}</Text>
               </Pressable>
-              <Pressable
-                onPress={(event) => {
-                  event.stopPropagation?.();
-                  onListen();
-                }}
-                hitSlop={8}
-              >
+              <Pressable onPress={onListen} hitSlop={8}>
                 <Text style={listening ? styles.actionOn : styles.action}>
                   {listening ? "停止" : HOME_LISTEN_ACTION}
                 </Text>
               </Pressable>
             </View>
-          </Pressable>
+          </View>
         </View>
       ) : null}
     </View>

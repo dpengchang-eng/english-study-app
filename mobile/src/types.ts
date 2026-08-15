@@ -66,6 +66,8 @@ export type SubmitPracticeResult = {
 export type Conversion = {
   id: string;
   createdAt: number;
+  /** First place in the convert chat. Retry may refresh createdAt for the 30s wait. */
+  threadAt?: number;
   sourceText: string;
   sentences: Sentence[];
   status: ConversionStatus;

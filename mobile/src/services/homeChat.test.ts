@@ -9,6 +9,8 @@ import {
   conversionSpeakable,
   failedTurnShowsQuotaHint,
   failedTurnShowsRetry,
+  homeListenShouldStop,
+  threadTime,
   HOME_COPY_ACTION,
   HOME_COPY_TOAST,
   HOME_EMPTY_HINT,
@@ -42,6 +44,24 @@ describe("conversationOrder", () => {
       conversationOrder([newest, oldest, mid]).map((item) => item.id),
       ["a", "b", "c"]
     );
+  });
+
+  it("keeps a retried turn in its first place when createdAt is refreshed", () => {
+    const retried = row({ id: "a", status: "loading", createdAt: 99, threadAt: 10 });
+    const later = row({ id: "b", status: "ready", createdAt: 20, threadAt: 20 });
+    assert.equal(threadTime(retried), 10);
+    assert.deepEqual(
+      conversationOrder([later, retried]).map((item) => item.id),
+      ["a", "b"]
+    );
+  });
+});
+
+describe("homeListenShouldStop", () => {
+  it("stops the same bubble, including a pending start, and starts a different one", () => {
+    assert.equal(homeListenShouldStop("a", "a"), true);
+    assert.equal(homeListenShouldStop(null, "a"), false);
+    assert.equal(homeListenShouldStop("a", "b"), false);
   });
 });
 
@@ -144,6 +164,7 @@ describe("Home conversation window", () => {
     const turn = readFileSync(new URL("../components/ChatTurn.tsx", import.meta.url), "utf8");
     const composer = readFileSync(new URL("../components/ChatComposer.tsx", import.meta.url), "utf8");
     const helpers = readFileSync(new URL("./homeChat.ts", import.meta.url), "utf8");
+    const appState = readFileSync(new URL("../context/AppState.tsx", import.meta.url), "utf8");
     const sendFn = home.match(/const send = \(\): void => \{[\s\S]*?\n  \};/)?.[0] ?? "";
     assert.match(home, /sendFromComposer/);
     assert.match(home, /startConversion/);
@@ -151,6 +172,7 @@ describe("Home conversation window", () => {
     assert.doesNotMatch(sendFn, /navigate/);
     assert.match(home, /openResult/);
     assert.match(home, /onOpenResult=\{\(\) => openResult/);
+    assert.match(home, /extraData=\{listenId\}/);
     assert.match(home, /HOME_COPY_TOAST/);
     assert.match(home, /useFocusEffect/);
     assert.match(home, /scrollToEnd/);
@@ -167,6 +189,13 @@ describe("Home conversation window", () => {
     assert.match(turn, /HOME_LOADING_TEXT/);
     assert.match(turn, /HOME_RETRY_ACTION/);
     assert.match(turn, /onFocusInput/);
+    const resultPressable = turn.match(/<Pressable[^>]*onPress=\{onOpenResult\}[^>]*>[\s\S]*?<\/Pressable>/)?.[0] ?? "";
+    assert.match(resultPressable, /onPress=\{onOpenResult\}/);
+    assert.doesNotMatch(resultPressable, /onCopy|HOME_COPY_ACTION|onListen|HOME_LISTEN_ACTION/);
+    assert.doesNotMatch(turn, /stopPropagation/);
+    const listenHook = readFileSync(new URL("../hooks/useHomeArticleListen.ts", import.meta.url), "utf8");
+    assert.match(listenHook, /homeListenShouldStop/);
+    assert.match(listenHook, /mode !== "idle"/);
     assert.doesNotMatch(turn, /已复制/);
     assert.doesNotMatch(turn, /再试一次/);
     assert.doesNotMatch(turn, /转换中/);
@@ -176,6 +205,8 @@ describe("Home conversation window", () => {
     assert.doesNotMatch(home, /showMic/);
     assert.doesNotMatch(home, /loadSample/);
     assert.doesNotMatch(home, /startListening/);
+    assert.match(appState, /threadAt: createdAt/);
+    assert.match(appState, /threadAt: current.threadAt \?\? current.createdAt/);
     assert.equal(HOME_EMPTY_HINT, "先说一句你想怎么讲，比如“这个周末有空吗”");
     assert.equal(HOME_INPUT_PLACEHOLDER, "说中文或英文，转成地道的美式说法");
     assert.equal(HOME_OFFLINE_BANNER, "没有网，没法转换");

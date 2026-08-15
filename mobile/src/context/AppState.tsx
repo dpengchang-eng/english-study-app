@@ -125,6 +125,7 @@ export function AppStateProvider({
   const startConversion = useCallback(
     (text: string, options: { sourceType: SourceType; sourceLangHint?: SourceLang }): string => {
       const clientRequestId = Crypto.randomUUID();
+      const createdAt = Date.now();
       const draft: Conversion = {
         id: clientRequestId,
         clientRequestId,
@@ -133,7 +134,8 @@ export function AppStateProvider({
         sourceLang: options.sourceLangHint,
         sentences: [],
         status: "loading",
-        createdAt: Date.now()
+        createdAt,
+        threadAt: createdAt
       };
       upsert(draft);
       void runConvert(clientRequestId, draft.sourceText, {
@@ -164,7 +166,8 @@ export function AppStateProvider({
         sourceLang: hint,
         sentences: [],
         status: "loading",
-        createdAt
+        createdAt,
+        threadAt: current.threadAt ?? current.createdAt
       };
       upsert(draft);
       void runConvert(current.id, draft.sourceText, {

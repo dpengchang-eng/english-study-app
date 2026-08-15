@@ -97,6 +97,7 @@ export function HomeScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.thread}
         keyboardShouldPersistTaps="handled"
+        extraData={listenId}
         onContentSizeChange={() => scrollToEnd(true)}
         ListEmptyComponent={<EmptyHint text={HOME_EMPTY_HINT} />}
         renderItem={({ item }) => (

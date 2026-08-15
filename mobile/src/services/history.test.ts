@@ -36,6 +36,20 @@ describe("applyConvertResult", () => {
     assert.equal(next[0]?.outputText, "ok");
   });
 
+  it("keeps the first chat place when a retry result comes back", () => {
+    const loading = row({ id: "a", clientRequestId: "r2", status: "loading", createdAt: 99, threadAt: 10 });
+    const ready = row({
+      id: "a",
+      clientRequestId: "r2",
+      status: "ready",
+      createdAt: 99,
+      outputText: "Free this weekend?"
+    });
+    const next = applyConvertResult([loading], ready);
+    assert.equal(next[0]?.threadAt, 10);
+    assert.equal(next[0]?.status, "ready");
+  });
+
   it("ignores a stale result after retry issued a new clientRequestId", () => {
     const loading = row({ id: "a", clientRequestId: "r2", status: "loading" });
     const stale = row({ id: "a", clientRequestId: "r1", status: "failed", errorCode: "gemini_timeout" });

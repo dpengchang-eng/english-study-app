@@ -8,6 +8,7 @@ import {
   speakableItems,
   type ArticlePlayMode
 } from "../services/articleSpeech";
+import { type SpeechSpeed } from "../services/speechSpeed";
 import { continueSpeaking, speakAmerican, stopSpeaking, type SpeakHandlers } from "../services/tts";
 
 export type ArticleSpeechMode = ArticlePlayMode | "idle";
@@ -15,13 +16,15 @@ export type ArticleSpeechMode = ArticlePlayMode | "idle";
 export function useArticleSpeech(
   sentences: Array<{ id: string; text: string }>,
   onError: () => void,
-  resetKey?: string
+  resetKey?: string,
+  speed: SpeechSpeed = 1
 ): {
   mode: ArticleSpeechMode;
   playingId: string | null;
   toggle: (mode: Exclude<ArticlePlayMode, "once" | "loopOne">) => void;
   playOnce: (id: string) => void;
   loopOne: (id: string) => void;
+  restartCurrent: (nextSpeed?: SpeechSpeed) => void;
   stop: () => void;
 } {
   const items = speakableItems(sentences);
@@ -31,6 +34,8 @@ export function useArticleSpeech(
   onErrorRef.current = onError;
   const selectedIdRef = useRef<string | null>(null);
   const sessionRef = useRef(0);
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
   const [mode, setMode] = useState<ArticleSpeechMode>("idle");
   const [playingId, setPlayingId] = useState<string | null>(null);
 
@@ -68,8 +73,8 @@ export function useArticleSpeech(
         speakAt(session, playMode, next, false);
       }
     };
-    if (interrupt) speakAmerican(item.text, handlers);
-    else continueSpeaking(item.text, handlers);
+    if (interrupt) speakAmerican(item.text, handlers, speedRef.current);
+    else continueSpeaking(item.text, handlers, speedRef.current);
   }, []);
 
   const start = useCallback(
@@ -107,6 +112,19 @@ export function useArticleSpeech(
     [mode, playingId, start, stop]
   );
 
+  const restartCurrent = useCallback(
+    (nextSpeed?: SpeechSpeed) => {
+      if (nextSpeed != null) speedRef.current = nextSpeed;
+      if (mode === "idle" || !playingId) return;
+      const index = indexById(itemsRef.current, playingId);
+      if (index == null) return;
+      sessionRef.current += 1;
+      stopSpeaking();
+      speakAt(sessionRef.current, mode, index, true);
+    },
+    [mode, playingId, speakAt]
+  );
+
   const loopOne = useCallback(
     (id: string) => {
       if (mode === "loopOne" && playingId === id) {
@@ -139,5 +157,5 @@ export function useArticleSpeech(
     }, [stop])
   );
 
-  return { mode, playingId, toggle, playOnce, loopOne, stop };
+  return { mode, playingId, toggle, playOnce, loopOne, restartCurrent, stop };
 }

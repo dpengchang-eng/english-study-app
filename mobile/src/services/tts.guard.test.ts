@@ -8,6 +8,7 @@ describe("listen tts", () => {
     const pkg = readFileSync(new URL("../../package.json", import.meta.url), "utf8");
     assert.match(tts, /expo-speech/);
     assert.match(tts, /language:\s*"en-US"/);
+    assert.match(tts, /rate:\s*expoSpeechRate/);
     assert.match(tts, /Speech\.stop/);
     assert.doesNotMatch(tts, /expo-speech-recognition/);
     assert.doesNotMatch(pkg, /expo-speech-recognition/);
@@ -24,6 +25,9 @@ describe("listen tts", () => {
     assert.match(result, /停止/);
     assert.match(result, /listenPipe/);
     assert.match(result, /toggle\("loopAll"\)/);
+    assert.match(result, /语速/);
+    assert.match(result, /onCycleSpeed/);
+    assert.match(result, /restartCurrent/);
     assert.match(result, /onLoop/);
     assert.match(list, /"停止" : "单听"/);
     assert.doesNotMatch(list, /"停止" : "听"/);

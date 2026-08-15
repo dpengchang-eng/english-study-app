@@ -1,4 +1,6 @@
 import * as Speech from "expo-speech";
+import { Platform } from "react-native";
+import { expoSpeechRate, parseSpeechSpeed, type SpeechSpeed } from "./speechSpeed";
 
 export const SPEAK_FAIL_TEXT = "朗读失败，请再试一次";
 
@@ -15,9 +17,10 @@ function handlersOf(arg?: (() => void) | SpeakHandlers): SpeakHandlers {
   return arg ?? {};
 }
 
-function speakNow(text: string, token: number, handlers: SpeakHandlers): void {
+function speakNow(text: string, token: number, handlers: SpeakHandlers, speed: SpeechSpeed): void {
   Speech.speak(text, {
     language: "en-US",
+    rate: expoSpeechRate(speed, Platform.OS),
     onDone: () => {
       if (token === speakToken) handlers.onDone?.();
     },
@@ -31,7 +34,11 @@ function speakNow(text: string, token: number, handlers: SpeakHandlers): void {
 }
 
 /** Locked v1.1 listen: system American English. Ignore audioStatus / audioUrl. */
-export function speakAmerican(text: string, onErrorOrHandlers?: (() => void) | SpeakHandlers): void {
+export function speakAmerican(
+  text: string,
+  onErrorOrHandlers?: (() => void) | SpeakHandlers,
+  speed: SpeechSpeed = 1
+): void {
   const trimmed = text.trim();
   const handlers = handlersOf(onErrorOrHandlers);
   if (!trimmed) {
@@ -41,14 +48,18 @@ export function speakAmerican(text: string, onErrorOrHandlers?: (() => void) | S
   const token = ++speakToken;
   try {
     Speech.stop();
-    speakNow(trimmed, token, handlers);
+    speakNow(trimmed, token, handlers, parseSpeechSpeed(speed));
   } catch {
     handlers.onError?.();
   }
 }
 
 /** Next sentence after onDone. Do not stop first — that would cancel the chain. */
-export function continueSpeaking(text: string, onErrorOrHandlers?: (() => void) | SpeakHandlers): void {
+export function continueSpeaking(
+  text: string,
+  onErrorOrHandlers?: (() => void) | SpeakHandlers,
+  speed: SpeechSpeed = 1
+): void {
   const trimmed = text.trim();
   const handlers = handlersOf(onErrorOrHandlers);
   if (!trimmed) {
@@ -57,7 +68,7 @@ export function continueSpeaking(text: string, onErrorOrHandlers?: (() => void) 
   }
   const token = speakToken;
   try {
-    speakNow(trimmed, token, handlers);
+    speakNow(trimmed, token, handlers, parseSpeechSpeed(speed));
   } catch {
     handlers.onError?.();
   }

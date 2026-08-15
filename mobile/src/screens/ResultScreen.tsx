@@ -12,6 +12,13 @@ import { auth } from "../firebase";
 import { openLookup } from "../navigation/rootNav";
 import type { ConvertStackParamList } from "../navigation/types";
 import { ensureTappableTokens } from "../services/align";
+import {
+  loadSpeechSpeed,
+  nextSpeechSpeed,
+  saveSpeechSpeed,
+  speechSpeedLabel,
+  type SpeechSpeed
+} from "../services/speechSpeed";
 import { SPEAK_FAIL_TEXT } from "../services/tts";
 import { colors, space } from "../theme";
 import { CONVERT_WAIT_MS, type Sentence, type Token } from "../types";
@@ -40,12 +47,18 @@ export function ResultScreen() {
   const [copied, setCopied] = useState(false);
   const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
   const [speakError, setSpeakError] = useState<string | null>(null);
-  const { mode, playingId, toggle, playOnce, loopOne, stop } = useArticleSpeech(
+  const [speed, setSpeed] = useState<SpeechSpeed>(1);
+  const { mode, playingId, toggle, playOnce, loopOne, restartCurrent, stop } = useArticleSpeech(
     sentences,
     () => setSpeakError(SPEAK_FAIL_TEXT),
-    conversionId
+    conversionId,
+    speed
   );
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
+
+  useEffect(() => {
+    void loadSpeechSpeed().then(setSpeed);
+  }, []);
 
   useEffect(() => {
     if (!conversion || conversion.status !== "loading") return;
@@ -95,6 +108,13 @@ export function ResultScreen() {
     toggle("loopAll");
   };
 
+  const onCycleSpeed = (): void => {
+    const next = nextSpeechSpeed(speed);
+    setSpeed(next);
+    void saveSpeechSpeed(next);
+    restartCurrent(next);
+  };
+
   const openTokens = (sentence: Sentence, tokens: Token[]): void => {
     stop();
     setPicked(null);
@@ -136,6 +156,10 @@ export function ResultScreen() {
             <Text style={mode === "loopAll" ? styles.listenOn : styles.listenText}>
               {mode === "loopAll" ? "停止" : "复读全文"}
             </Text>
+          </Pressable>
+          <Text style={styles.listenPipe}>|</Text>
+          <Pressable onPress={onCycleSpeed} hitSlop={8}>
+            <Text style={styles.listenText}>{speechSpeedLabel(speed)}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -191,7 +215,7 @@ const styles = StyleSheet.create({
   speakError: { color: colors.warn, fontSize: 14 },
   phrase: { backgroundColor: colors.accentSoft, borderRadius: 12, padding: 12 },
   phraseText: { color: colors.ink, fontWeight: "700" },
-  listenRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  listenRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
   listenText: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   listenOn: { color: colors.accent, fontWeight: "700", fontSize: 16 },
   listenPipe: { color: colors.muted, fontSize: 16 },

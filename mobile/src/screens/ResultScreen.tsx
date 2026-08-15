@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   speakError: { color: colors.warn, fontSize: 14 },
   phrase: { backgroundColor: colors.accentSoft, borderRadius: 12, padding: 12 },
   phraseText: { color: colors.ink, fontWeight: "700" },
-  listenRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
+  listenRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   listenText: { color: colors.ink, fontWeight: "700", fontSize: 16 },
   listenOn: { color: colors.accent, fontWeight: "700", fontSize: 16 },
   listenPipe: { color: colors.muted, fontSize: 16 },

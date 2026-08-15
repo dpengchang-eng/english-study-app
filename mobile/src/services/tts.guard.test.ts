@@ -19,13 +19,15 @@ describe("listen tts", () => {
     const list = readFileSync(new URL("../components/SentenceList.tsx", import.meta.url), "utf8");
     const hook = readFileSync(new URL("../hooks/useArticleSpeech.ts", import.meta.url), "utf8");
     const planner = readFileSync(new URL("./articleSpeech.ts", import.meta.url), "utf8");
+    const speed = readFileSync(new URL("./speechSpeed.ts", import.meta.url), "utf8");
     assert.match(result, /听全文/);
     assert.match(result, /"停止" : "复读全文"/);
     assert.doesNotMatch(result, /"停止" : "复读"/);
     assert.match(result, /停止/);
     assert.match(result, /listenPipe/);
     assert.match(result, /toggle\("loopAll"\)/);
-    assert.match(result, /语速/);
+    assert.match(result, /speechSpeedLabel/);
+    assert.match(speed, /语速/);
     assert.match(result, /onCycleSpeed/);
     assert.match(result, /restartCurrent/);
     assert.match(result, /onLoop/);

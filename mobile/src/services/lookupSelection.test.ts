@@ -70,9 +70,13 @@ describe("lookup sheet copy", () => {
     const nextAt = lookup.indexOf("下一句");
     assert.ok(sentenceAt >= 0 && sentenceAt < prevAt && prevAt < wholeAt && wholeAt < nextAt);
     assert.match(lookup, /加入词本/);
+    assert.match(lookup, /听选区/);
     assert.match(lookup, /lookupWord\(\{ lemma, surface: phrase, sentenceContext \}\)/);
+    assert.match(lookup, /const lemma = built\.lemmaKey/);
     assert.match(lookup, /peekSpeechSpeed/);
     assert.match(lookup, /firstWordSpan/);
+    assert.doesNotMatch(lookup, /disabled=\{loading\}/);
+    assert.doesNotMatch(lookup, /if \(loading\) return/);
     assert.doesNotMatch(lookup, /存入词本/);
     assert.doesNotMatch(lookup, /听全文|复读全文/);
     assert.doesNotMatch(lookup, /styles\.phrase/);

@@ -64,7 +64,7 @@ export function LookupScreen() {
   const sentenceContext = sentence?.text ?? route.params.sentenceText;
   const built = phraseFromTokens(selected, sentenceContext);
   const phrase = built.phrase;
-  const lemma = selected.find((token) => token.isWord)?.lemma || built.lemmaKey;
+  const lemma = built.lemmaKey;
   const lemmaKey = built.lemmaKey;
   const alreadySaved = items.some((item) => item.id === lemmaKey);
   const [ipa, setIpa] = useState("");
@@ -216,7 +216,7 @@ export function LookupScreen() {
       {!loading && simpleEn ? <Text style={styles.simpleEn}>{simpleEn}</Text> : null}
       <View style={styles.row}>
         <Pressable style={styles.ghost} onPress={toggleListen}>
-          <Text style={styles.ghostText}>听</Text>
+          <Text style={styles.ghostText}>听选区</Text>
         </Pressable>
         <Pressable style={styles.btn} onPress={() => void save()}>
           <Text style={styles.btnText}>加入词本</Text>

@@ -12,13 +12,13 @@ export const HOME_OFFLINE_BANNER = "没有网，没法转换";
 export const HOME_LOADING_TEXT = "正在改成更地道的说法…";
 export const HOME_QUOTA_BIND_HINT = "绑定后每天 80 次";
 
-export function threadTime(item: Pick<Conversion, "createdAt" | "threadAt">): number {
-  return item.threadAt ?? item.createdAt;
+/** Recents are stored newest-first. Chat shows oldest at top, newest at bottom. createdAt stays put on retry. */
+export function conversationOrder(recents: Conversion[]): Conversion[] {
+  return [...recents].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 }
 
-/** Recents are stored newest-first. Chat shows oldest at top, newest at bottom. */
-export function conversationOrder(recents: Conversion[]): Conversion[] {
-  return [...recents].sort((a, b) => threadTime(a) - threadTime(b) || a.id.localeCompare(b.id));
+export function shouldScrollChatToEnd(prevCount: number, nextCount: number): boolean {
+  return nextCount > prevCount;
 }
 
 /** Same bubble again means stop. A different bubble means stop current, then start that one. */

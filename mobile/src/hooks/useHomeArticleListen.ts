@@ -20,7 +20,7 @@ export function useHomeArticleListen(recents: Conversion[]): {
   const [listenId, setListenId] = useState<string | null>(null);
   const item = recents.find((row) => row.id === listenId);
   const sentences = item ? conversionSpeakable(item) : [];
-  const { mode, toggle, stop } = useArticleSpeech(sentences, () => undefined, listenId ?? "", speed);
+  const { mode, start, stop } = useArticleSpeech(sentences, () => undefined, listenId ?? "", speed);
   const pendingStart = useRef<string | null>(null);
   const playingId = useRef<string | null>(null);
   const playingRef = useRef(false);
@@ -40,10 +40,9 @@ export function useHomeArticleListen(recents: Conversion[]): {
   useEffect(() => {
     if (!pendingStart.current || pendingStart.current !== listenId) return;
     if (sentences.length === 0) return;
-    if (mode !== "idle") return;
     pendingStart.current = null;
-    toggle("all");
-  }, [listenId, sentences.length, toggle, mode]);
+    start("all");
+  }, [listenId, sentences.length, start]);
 
   useEffect(() => {
     if (mode === "all" && listenId) playingId.current = listenId;

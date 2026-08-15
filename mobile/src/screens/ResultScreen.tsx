@@ -23,7 +23,7 @@ import {
 } from "../services/speechSpeed";
 import { SPEAK_FAIL_TEXT } from "../services/tts";
 import { colors, space } from "../theme";
-import { CONVERT_WAIT_MS, type Sentence, type Token } from "../types";
+import { convertWaitLeftMs, type Sentence, type Token } from "../types";
 
 function consecutiveWords(tokens: Token[], a: Token, b: Token): Token[] | null {
   const words = tokens.filter((token) => token.isWord);
@@ -85,10 +85,9 @@ export function ResultScreen() {
 
   useEffect(() => {
     if (!conversion || conversion.status !== "loading") return;
-    const left = CONVERT_WAIT_MS - (Date.now() - conversion.createdAt);
-    const timer = setTimeout(() => failIfLoading(conversionId, "gemini_timeout"), Math.max(0, left));
+    const timer = setTimeout(() => failIfLoading(conversionId, "gemini_timeout"), convertWaitLeftMs(conversion));
     return () => clearTimeout(timer);
-  }, [conversionId, conversion?.status, conversion?.createdAt, failIfLoading]);
+  }, [conversionId, conversion?.status, conversion?.createdAt, conversion?.attemptedAt, failIfLoading]);
 
   if (!conversion) {
     return (

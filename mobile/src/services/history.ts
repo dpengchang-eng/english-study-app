@@ -49,7 +49,7 @@ export function applyConvertResult(list: Conversion[], incoming: Conversion): Co
   if (current.status === "ready") return list;
   return mergeRecent(list, {
     ...incoming,
-    threadAt: current.threadAt ?? current.createdAt
+    createdAt: current.createdAt
   });
 }
 

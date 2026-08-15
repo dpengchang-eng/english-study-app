@@ -36,8 +36,8 @@ describe("applyConvertResult", () => {
     assert.equal(next[0]?.outputText, "ok");
   });
 
-  it("keeps the first chat place when a retry result comes back", () => {
-    const loading = row({ id: "a", clientRequestId: "r2", status: "loading", createdAt: 99, threadAt: 10 });
+  it("keeps the first createdAt when a retry result comes back", () => {
+    const loading = row({ id: "a", clientRequestId: "r2", status: "loading", createdAt: 10, attemptedAt: 99 });
     const ready = row({
       id: "a",
       clientRequestId: "r2",
@@ -46,7 +46,7 @@ describe("applyConvertResult", () => {
       outputText: "Free this weekend?"
     });
     const next = applyConvertResult([loading], ready);
-    assert.equal(next[0]?.threadAt, 10);
+    assert.equal(next[0]?.createdAt, 10);
     assert.equal(next[0]?.status, "ready");
   });
 

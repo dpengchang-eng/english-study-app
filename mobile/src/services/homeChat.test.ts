@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { Conversion } from "../types";
-import { ERROR_COPY } from "../types";
+import { convertWaitLeftMs, ERROR_COPY } from "../types";
 import {
   conversationOrder,
   conversionEnglish,
@@ -10,7 +10,7 @@ import {
   failedTurnShowsQuotaHint,
   failedTurnShowsRetry,
   homeListenShouldStop,
-  threadTime,
+  shouldScrollChatToEnd,
   HOME_COPY_ACTION,
   HOME_COPY_TOAST,
   HOME_EMPTY_HINT,
@@ -46,14 +46,24 @@ describe("conversationOrder", () => {
     );
   });
 
-  it("keeps a retried turn in its first place when createdAt is refreshed", () => {
-    const retried = row({ id: "a", status: "loading", createdAt: 99, threadAt: 10 });
-    const later = row({ id: "b", status: "ready", createdAt: 20, threadAt: 20 });
-    assert.equal(threadTime(retried), 10);
+  it("keeps a retried turn in place when only attemptedAt is refreshed", () => {
+    const retried = row({ id: "a", status: "loading", createdAt: 10, attemptedAt: 99 });
+    const later = row({ id: "b", status: "ready", createdAt: 20, attemptedAt: 20 });
     assert.deepEqual(
       conversationOrder([later, retried]).map((item) => item.id),
       ["a", "b"]
     );
+    assert.equal(convertWaitLeftMs(retried, 99), 30_000);
+    assert.equal(convertWaitLeftMs({ createdAt: 10 }, 10 + 5_000), 25_000);
+  });
+});
+
+describe("shouldScrollChatToEnd", () => {
+  it("scrolls only when a new turn is added", () => {
+    assert.equal(shouldScrollChatToEnd(0, 1), true);
+    assert.equal(shouldScrollChatToEnd(2, 3), true);
+    assert.equal(shouldScrollChatToEnd(3, 3), false);
+    assert.equal(shouldScrollChatToEnd(3, 2), false);
   });
 });
 
@@ -173,6 +183,8 @@ describe("Home conversation window", () => {
     assert.match(home, /openResult/);
     assert.match(home, /onOpenResult=\{\(\) => openResult/);
     assert.match(home, /extraData=\{listenId\}/);
+    assert.match(home, /shouldScrollChatToEnd/);
+    assert.match(home, /stickToEnd/);
     assert.match(home, /HOME_COPY_TOAST/);
     assert.match(home, /useFocusEffect/);
     assert.match(home, /scrollToEnd/);
@@ -195,7 +207,8 @@ describe("Home conversation window", () => {
     assert.doesNotMatch(turn, /stopPropagation/);
     const listenHook = readFileSync(new URL("../hooks/useHomeArticleListen.ts", import.meta.url), "utf8");
     assert.match(listenHook, /homeListenShouldStop/);
-    assert.match(listenHook, /mode !== "idle"/);
+    assert.match(listenHook, /start\("all"\)/);
+    assert.doesNotMatch(listenHook, /toggle\(/);
     assert.doesNotMatch(turn, /已复制/);
     assert.doesNotMatch(turn, /再试一次/);
     assert.doesNotMatch(turn, /转换中/);
@@ -205,8 +218,10 @@ describe("Home conversation window", () => {
     assert.doesNotMatch(home, /showMic/);
     assert.doesNotMatch(home, /loadSample/);
     assert.doesNotMatch(home, /startListening/);
-    assert.match(appState, /threadAt: createdAt/);
-    assert.match(appState, /threadAt: current.threadAt \?\? current.createdAt/);
+    assert.match(appState, /attemptedAt: createdAt/);
+    assert.match(appState, /createdAt: current.createdAt/);
+    assert.match(appState, /attemptedAt/);
+    assert.match(home, /convertWaitLeftMs/);
     assert.equal(HOME_EMPTY_HINT, "先说一句你想怎么讲，比如“这个周末有空吗”");
     assert.equal(HOME_INPUT_PLACEHOLDER, "说中文或英文，转成地道的美式说法");
     assert.equal(HOME_OFFLINE_BANNER, "没有网，没法转换");

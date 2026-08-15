@@ -66,8 +66,8 @@ export type SubmitPracticeResult = {
 export type Conversion = {
   id: string;
   createdAt: number;
-  /** First place in the convert chat. Retry may refresh createdAt for the 30s wait. */
-  threadAt?: number;
+  /** Last convert attempt. 30s timeout uses this; chat order stays on createdAt. */
+  attemptedAt?: number;
   sourceText: string;
   sentences: Sentence[];
   status: ConversionStatus;
@@ -85,6 +85,14 @@ export const SENTENCE_CAP = 15;
 export const RECORD_MAX_MS = 30_000;
 export const CONVERT_WAIT_MS = 30_000;
 export const RECENT_CAP = 20;
+
+export function convertAttemptedAt(item: { createdAt: number; attemptedAt?: number }): number {
+  return item.attemptedAt ?? item.createdAt;
+}
+
+export function convertWaitLeftMs(item: { createdAt: number; attemptedAt?: number }, now = Date.now()): number {
+  return Math.max(0, CONVERT_WAIT_MS - (now - convertAttemptedAt(item)));
+}
 
 export const ERROR_COPY: Record<ConvertErrorCode, string> = {
   quota_exceeded: "今天的转换次数用完了",

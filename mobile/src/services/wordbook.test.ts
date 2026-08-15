@@ -57,6 +57,19 @@ describe("saveToWordbook selection", () => {
     assert.ok(draft.lemmaKey);
   });
 
+  it("pins saved simpleEn to one line", () => {
+    const draft = wordbookDraftFromSelection({
+      tokens: words(tokens).slice(3, 5),
+      sentenceTokens: tokens,
+      sentenceText: sentence,
+      conversionId: "c1",
+      ipa: "",
+      senses: ["随手拿"],
+      simpleEn: "Grab coffee quickly.\nA second line."
+    });
+    assert.equal(draft.simpleEn, "Grab coffee quickly.");
+  });
+
   it("saves a whole-sentence span, including punctuation, as one cloze blank", () => {
     const allWords = words(tokens);
     const draft = wordbookDraftFromSelection({

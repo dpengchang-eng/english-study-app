@@ -71,8 +71,11 @@ describe("lookup sheet copy", () => {
     assert.ok(sentenceAt >= 0 && sentenceAt < prevAt && prevAt < wholeAt && wholeAt < nextAt);
     assert.match(lookup, /加入词本/);
     assert.match(lookup, /听选区/);
-    assert.match(lookup, /lookupWord\(\{ lemma, surface: phrase, sentenceContext \}\)/);
+    assert.match(lookup, /const surface = wholeOn \? sentenceText : phrase/);
+    assert.match(lookup, /lookupWord\(\{ lemma, surface, sentenceContext \}\)/);
+    assert.match(lookup, /lookupForSave/);
     assert.match(lookup, /const lemma = built\.lemmaKey/);
+    assert.match(lookup, /spanFromSelected\(route\.params/);
     assert.match(lookup, /peekSpeechSpeed/);
     assert.match(lookup, /firstWordSpan/);
     assert.doesNotMatch(lookup, /disabled=\{loading\}/);

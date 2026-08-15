@@ -1,5 +1,6 @@
 import { PHRASE_MAX, SENTENCE_CONTEXT_MAX, type Token } from "../types";
 import { offsetsFromTokens, resolveBlankSpan } from "./blank";
+import { oneLineSimpleEn } from "./lookupParse";
 import { slugLemma } from "./slug";
 
 export const EMPTY_SELECTION = "没有可保存的词";
@@ -111,6 +112,6 @@ export function wordbookDraftFromSelection(input: {
     conversionId: (input.conversionId || "local").slice(0, 80),
     ipa: input.ipa.slice(0, 80),
     senses: input.senses.filter((item) => item.trim()).slice(0, 3),
-    simpleEn: (input.simpleEn ?? "").trim().slice(0, SENTENCE_CONTEXT_MAX)
+    simpleEn: oneLineSimpleEn(input.simpleEn ?? "").slice(0, SENTENCE_CONTEXT_MAX)
   };
 }

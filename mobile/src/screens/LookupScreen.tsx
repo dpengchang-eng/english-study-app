@@ -1,11 +1,11 @@
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
 import { ensureTappableTokens } from "../services/align";
-import { lookupWord } from "../services/lookup";
+import { lookupForSave, lookupWord, type LookupResult } from "../services/lookup";
 import {
   firstWordSpan,
   isWholeSentence,
@@ -61,9 +61,11 @@ export function LookupScreen() {
   const words = wordTokens(tokens);
   const selected = tokensForSpan(tokens, span);
   const wholeOn = isWholeSentence(span, words.length);
-  const sentenceContext = sentence?.text ?? route.params.sentenceText;
+  const sentenceText = sentence?.text ?? route.params.sentenceText;
+  const sentenceContext = sentenceText;
   const built = phraseFromTokens(selected, sentenceContext);
   const phrase = built.phrase;
+  const surface = wholeOn ? sentenceText : phrase;
   const lemma = built.lemmaKey;
   const lemmaKey = built.lemmaKey;
   const alreadySaved = items.some((item) => item.id === lemmaKey);
@@ -76,6 +78,7 @@ export function LookupScreen() {
   const [listening, setListening] = useState(false);
   const canPrev = sentenceIndex > 0;
   const canNext = sentenceIndex < sentences.length - 1;
+  const lookupRef = useRef<Promise<LookupResult> | null>(null);
 
   useEffect(() => {
     return () => stopSpeaking();
@@ -96,7 +99,9 @@ export function LookupScreen() {
     setIpa("");
     setSenses([]);
     setSimpleEn("");
-    void lookupWord({ lemma, surface: phrase, sentenceContext })
+    const pending = lookupWord({ lemma, surface, sentenceContext });
+    lookupRef.current = pending;
+    void pending
       .then((result) => {
         if (!live) return;
         setIpa(result.ipa);
@@ -114,7 +119,7 @@ export function LookupScreen() {
     return () => {
       live = false;
     };
-  }, [lemma, phrase, sentenceContext]);
+  }, [lemma, surface, sentenceContext]);
 
   const tapWord = (token: Token): void => {
     const index = words.findIndex((word) => word.id === token.id);
@@ -141,7 +146,7 @@ export function LookupScreen() {
     }
     setSpeakError(null);
     setListening(true);
-    speakAmerican(phrase, {
+    speakAmerican(surface, {
       onError: () => {
         setListening(false);
         setSpeakError(SPEAK_FAIL_TEXT);
@@ -153,14 +158,15 @@ export function LookupScreen() {
 
   const save = async (): Promise<void> => {
     try {
+      const looked = await lookupForSave({ lemma, surface, sentenceContext }, lookupRef.current);
       const result = await savePhrase({
         tokens: selected,
         sentenceTokens: tokens,
         sentenceText: sentenceContext,
         conversionId: route.params.conversionId,
-        ipa,
-        senses: senses.slice(0, 3),
-        simpleEn
+        ipa: looked.ipa,
+        senses: looked.senses,
+        simpleEn: looked.simpleEn
       });
       if (!result.created) {
         setSaved("已在词本");

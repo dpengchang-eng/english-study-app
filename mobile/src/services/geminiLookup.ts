@@ -1,6 +1,8 @@
 import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 import { firebaseApp } from "../firebase";
-import { parseLookupResult, type LookupQuery, type LookupResult } from "./lookup";
+import { parseLookupResult, type LookupResult } from "./lookup";
+
+type LookupWordInput = { lemma: string; surface: string; sentenceContext: string };
 
 const MODEL = "gemini-flash-lite-latest";
 
@@ -21,11 +23,11 @@ function parseJson(text: string): unknown {
 const LOOKUP_PROMPT =
   "Return JSON only with keys ipa, pos, senses, and simpleEn. ipa is American English phonetic. pos is a short English part of speech or empty. senses is up to 3 short Simplified Chinese glosses. simpleEn is one short everyday English explanation, not a dictionary essay.";
 
-function lookupPrompt(query: LookupQuery): string {
+function lookupPrompt(query: LookupWordInput): string {
   return `${LOOKUP_PROMPT}\nLemma: ${query.lemma}\nPhrase: ${query.surface}\nSentence: ${query.sentenceContext}`;
 }
 
-async function lookupRest(query: LookupQuery, apiKey: string): Promise<LookupResult | null> {
+async function lookupRest(query: LookupWordInput, apiKey: string): Promise<LookupResult | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
@@ -63,7 +65,7 @@ async function lookupRest(query: LookupQuery, apiKey: string): Promise<LookupRes
   }
 }
 
-async function lookupAiLogic(query: LookupQuery): Promise<LookupResult | null> {
+async function lookupAiLogic(query: LookupWordInput): Promise<LookupResult | null> {
   try {
     const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
     const model = getGenerativeModel(
@@ -83,7 +85,7 @@ async function lookupAiLogic(query: LookupQuery): Promise<LookupResult | null> {
   }
 }
 
-export async function rewriteLookup(query: LookupQuery): Promise<LookupResult | null> {
+export async function rewriteLookup(query: LookupWordInput): Promise<LookupResult | null> {
   const key = geminiApiKey();
   if (key) return lookupRest(query, key);
   return lookupAiLogic(query);

@@ -17,7 +17,7 @@ import {
   type WordSpan
 } from "../services/lookupSelection";
 import { peekSpeechSpeed } from "../services/speechSpeed";
-import { phraseFromTokens, SAVE_SPAN_ERROR } from "../services/wordbook";
+import { phraseFromTokens } from "../services/wordbook";
 import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
 import type { Sentence, Token } from "../types";
@@ -110,7 +110,7 @@ export function LookupScreen() {
         if (!live) return;
         setIpa("");
         setPos("");
-        setSenses(["查词失败，请再试一次"]);
+        setSenses([]);
         setSimpleEn("");
         setLoading(false);
       });
@@ -156,14 +156,13 @@ export function LookupScreen() {
 
   const save = async (): Promise<void> => {
     try {
-      const failed = senses[0] === "查词失败，请再试一次" || senses[0] === "暂无中文释义";
       const result = await savePhrase({
-        tokens: wholeOn ? tokens : selected,
+        tokens: selected,
         sentenceTokens: tokens,
         sentenceText: sentenceContext,
         conversionId: route.params.conversionId,
         ipa,
-        senses: failed ? [] : senses.slice(0, 3)
+        senses: senses.slice(0, 3)
       });
       if (!result.created) {
         setSaved("已在词本");
@@ -171,7 +170,7 @@ export function LookupScreen() {
       }
       setSaved(result.item.syncState === "synced" ? "已加入词本" : "未同步到云");
     } catch {
-      setSaved(SAVE_SPAN_ERROR);
+      setSaved("没有可保存的词");
     }
   };
 

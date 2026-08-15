@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Token } from "../types";
-import { phraseFromTokens, SAVE_SPAN_ERROR, selectWordTokens, wordbookBlankSpan } from "./wordbook";
+import { blankSpan, phraseFromTokens, selectWordTokens } from "./wordbook";
 import { tokensForSpan, wholeSentenceSpan } from "./lookupSelection";
 
 function word(id: string, surface: string, start: number): Token {
@@ -15,6 +15,10 @@ function word(id: string, surface: string, start: number): Token {
   };
 }
 
+function punct(id: string, surface: string, start: number): Token {
+  return { id, lemma: surface, surface, isWord: false, charStart: start, charEnd: start + surface.length };
+}
+
 const sentence = [
   word("t0", "I'd", 0),
   word("t1", "like", 4),
@@ -26,33 +30,28 @@ const sentence = [
   word("t7", "sometime", 33)
 ];
 
-describe("selectWordTokens", () => {
-  it("allows a multi-word 说法 longer than six words", () => {
+describe("saveToWordbook", () => {
+  it("allows a consecutive span longer than six words", () => {
     const selected = selectWordTokens(sentence, sentence);
     assert.equal(selected.length, 8);
     assert.equal(phraseFromTokens(selected).phrase, "I'd like to grab coffee with you sometime");
   });
 
-  it("saves 整句 as every word in the sentence", () => {
-    const span = wholeSentenceSpan(sentence.length);
-    const selected = tokensForSpan(sentence, span);
-    const words = selectWordTokens(selected, sentence);
-    assert.equal(words.length, sentence.length);
-    assert.equal(words[0]?.id, "t0");
-    assert.equal(words[words.length - 1]?.id, "t7");
+  it("lets punctuation stay in a whole-sentence span and blanks the sentence", () => {
+    const text = "I'd like coffee.";
+    const tokens = [word("w0", "I'd", 0), word("w1", "like", 4), word("w2", "coffee", 9), punct("p0", ".", 15)];
+    const span = wholeSentenceSpan(3);
+    const selected = tokensForSpan(tokens, span);
+    assert.equal(selected[selected.length - 1]?.surface, ".");
+    const blank = blankSpan(text, selected, tokens);
+    assert.deepEqual(blank, { start: 0, end: text.length });
+    assert.equal(text.slice(blank.start, blank.end), text);
   });
 
-  it("rejects a hole in the span", () => {
-    assert.throws(() => selectWordTokens([sentence[0], sentence[2]], sentence), new Error(SAVE_SPAN_ERROR));
-  });
-
-  it("blanks the whole sentence when the span is 整句", () => {
+  it("sets blankSpan to the current selection and rejects only an empty selection", () => {
     const text = "I'd like to grab coffee with you sometime.";
-    const span = wordbookBlankSpan(text, sentence, sentence, "I'd like to grab coffee with you sometime", 0, 41);
-    assert.equal(span.phrase, text);
-    assert.equal(span.start, 0);
-    assert.equal(span.end, text.length);
-    const part = wordbookBlankSpan(text, [sentence[4]], sentence, "coffee", 17, 23);
+    const part = blankSpan(text, [sentence[4]], sentence);
     assert.equal(text.slice(part.start, part.end), "coffee");
+    assert.throws(() => selectWordTokens([], sentence), /没有可保存的词/);
   });
 });

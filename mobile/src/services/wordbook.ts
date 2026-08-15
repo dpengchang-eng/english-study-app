@@ -69,54 +69,62 @@ function asItem(id: string, raw: Record<string, unknown>): WordbookItem | null {
   };
 }
 
-export const SAVE_SPAN_ERROR = "只能存连续单词";
 const PHRASE_MAX = 760;
+const EMPTY_SELECTION = "没有可保存的词";
 
+function joinSurfaces(tokens: Token[]): string {
+  let out = "";
+  for (const token of tokens) {
+    if (!out) {
+      out = token.surface;
+      continue;
+    }
+    const glue = token.isWord && !/^[,.!?;:'")\]]/.test(token.surface) ? " " : "";
+    out += glue + token.surface;
+  }
+  return out.trim();
+}
+
+function wholeSentenceSelection(selected: Token[], sentenceTokens: Token[], sentenceText: string): boolean {
+  if (sentenceTokens.length > 0 && selected.length === sentenceTokens.length) return true;
+  const allWords = sentenceTokens.filter((token) => token.isWord);
+  const selectedWords = selected.filter((token) => token.isWord);
+  if (allWords.length > 0 && selectedWords.length === allWords.length) return true;
+  const offsets = offsetsFromTokens(selected);
+  return offsets.start === 0 && sentenceText.length > 0 && offsets.end >= sentenceText.length;
+}
+
+/** Consecutive span only. Punctuation may be in the span. Reject only an empty selection. */
 export function selectWordTokens(selected: Token[], sentenceTokens: Token[] = selected): Token[] {
-  const words = selected.filter((token) => token.isWord);
-  if (words.length !== selected.length || words.length < 1) {
-    throw new Error(SAVE_SPAN_ERROR);
-  }
-  const wordIds = sentenceTokens.filter((token) => token.isWord).map((token) => token.id);
-  const positions = words.map((token) => wordIds.indexOf(token.id)).sort((a, b) => a - b);
-  if (positions.some((index) => index < 0)) throw new Error(SAVE_SPAN_ERROR);
-  for (let i = 1; i < positions.length; i += 1) {
-    if (positions[i] !== positions[i - 1] + 1) throw new Error(SAVE_SPAN_ERROR);
-  }
-  return wordIds.slice(positions[0], positions[positions.length - 1] + 1).map((id) => {
-    const token = sentenceTokens.find((item) => item.id === id);
-    if (!token?.isWord) throw new Error(SAVE_SPAN_ERROR);
-    return token;
-  });
+  if (selected.length < 1) throw new Error(EMPTY_SELECTION);
+  const indexes = selected
+    .map((token) => sentenceTokens.findIndex((item) => item.id === token.id))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b);
+  if (!indexes.length) return selected;
+  return sentenceTokens.slice(indexes[0], indexes[indexes.length - 1] + 1);
 }
 
-export function coversWholeSentence(selected: Token[], sentenceTokens: Token[]): boolean {
-  const all = sentenceTokens.filter((token) => token.isWord);
-  const words = selected.filter((token) => token.isWord);
-  return all.length > 0 && words.length === all.length;
-}
-
-/** 整句 blanks the whole sentence as one cloze gap. A shorter span blanks only that phrase. */
-export function wordbookBlankSpan(
+/** blankSpan = current selection. A whole-sentence span covers the sentence. */
+export function blankSpan(
   sentenceText: string,
   selected: Token[],
-  sentenceTokens: Token[],
-  phrase: string,
-  start: number,
-  end: number
-): { phrase: string; start: number; end: number } {
-  if (coversWholeSentence(selected, sentenceTokens)) {
-    return { phrase: sentenceText, start: 0, end: sentenceText.length };
+  sentenceTokens: Token[] = selected
+): { start: number; end: number } {
+  const tokens = selected.length ? selectWordTokens(selected, sentenceTokens) : [];
+  if (!tokens.length) return { start: sentenceText.length, end: sentenceText.length };
+  if (wholeSentenceSelection(tokens, sentenceTokens, sentenceText)) {
+    return { start: 0, end: sentenceText.length };
   }
-  const span = resolveBlankSpan(sentenceText, phrase, start, end);
-  return { phrase, start: span.start, end: span.end };
+  const offsets = offsetsFromTokens(tokens);
+  return resolveBlankSpan(sentenceText, joinSurfaces(tokens), offsets.start, offsets.end);
 }
 
 export function phraseFromTokens(tokens: Token[]): { phrase: string; lemmaKey: string; start: number; end: number } {
   const words = tokens.filter((token) => token.isWord);
-  const phrase = words.map((token) => token.surface).join(" ").trim();
+  const phrase = joinSurfaces(tokens);
   const lemmaKey = slugLemma(words.map((token) => token.lemma || token.surface).join(" "));
-  const { start, end } = offsetsFromTokens(words);
+  const { start, end } = offsetsFromTokens(tokens);
   return { phrase, lemmaKey, start, end };
 }
 
@@ -225,20 +233,17 @@ export async function saveToWordbook(
   }
 ): Promise<{ items: WordbookItem[]; created: boolean; item: WordbookItem }> {
   const sentenceTokens = input.sentenceTokens ?? input.tokens;
-  const words = selectWordTokens(
-    input.tokens.filter((token) => token.isWord),
-    sentenceTokens
-  );
-  const parsed = phraseFromTokens(words);
-  if (!parsed.phrase) throw new Error("没有可保存的词");
-  const existing = current.find((item) => item.id === parsed.lemmaKey);
+  const selected = selectWordTokens(input.tokens, sentenceTokens);
+  const parsed = phraseFromTokens(selected);
+  const sentenceText = input.sentenceText.slice(0, PHRASE_MAX);
+  const span = blankSpan(sentenceText, selected, sentenceTokens);
+  const phrase = (sentenceText.slice(span.start, span.end) || parsed.phrase).trim();
+  if (!phrase) throw new Error(EMPTY_SELECTION);
+  const { lemmaKey } = parsed;
+  const existing = current.find((item) => item.id === lemmaKey);
   if (existing) {
     return { items: current, created: false, item: existing };
   }
-  const sentenceText = input.sentenceText.slice(0, 760);
-  const span = wordbookBlankSpan(sentenceText, words, sentenceTokens, parsed.phrase, parsed.start, parsed.end);
-  const { lemmaKey } = parsed;
-  const phrase = span.phrase;
   const now = Date.now();
   const item: WordbookItem = {
     id: lemmaKey,

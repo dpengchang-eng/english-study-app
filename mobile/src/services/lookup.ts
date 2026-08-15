@@ -5,12 +5,6 @@ export type LookupResult = {
   pos: string;
 };
 
-export type LookupQuery = {
-  lemma: string;
-  surface: string;
-  sentenceContext: string;
-};
-
 const LOCAL: Record<string, LookupResult> = {
   coffee: { ipa: "/ˈkɔfi/", pos: "noun", senses: ["咖啡", "咖啡豆", "咖啡色"], simpleEn: "a hot drink from coffee beans" },
   grab: { ipa: "/ɡræb/", pos: "verb", senses: ["随手拿", "赶紧去做", "抓住"], simpleEn: "take something quickly" },
@@ -52,7 +46,11 @@ export function parseLookupResult(raw: unknown): LookupResult | null {
   return { ipa, pos, senses, simpleEn };
 }
 
-export async function lookupWord(query: LookupQuery): Promise<LookupResult> {
+export async function lookupWord(query: {
+  lemma: string;
+  surface: string;
+  sentenceContext: string;
+}): Promise<LookupResult> {
   try {
     const surface = query.surface.trim();
     const lemma = query.lemma.trim();
@@ -72,8 +70,8 @@ export async function lookupWord(query: LookupQuery): Promise<LookupResult> {
       memory.set(key, clipped);
       return clipped;
     }
-    return { ipa: "", pos: "", senses: ["暂无中文释义"], simpleEn: "" };
+    return { ipa: "", pos: "", senses: [], simpleEn: "" };
   } catch {
-    return { ipa: "", pos: "", senses: ["查词失败，请再试一次"], simpleEn: "" };
+    return { ipa: "", pos: "", senses: [], simpleEn: "" };
   }
 }

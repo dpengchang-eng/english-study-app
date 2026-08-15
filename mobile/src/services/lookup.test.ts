@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { clipLookup, lookupWord, parseLookupResult, type LookupResult } from "./lookup";
 
@@ -38,5 +39,15 @@ describe("LookupResult", () => {
     assert.equal(parsed.simpleEn, "a hot drink from coffee beans");
     assert.equal(parsed.pos, "noun");
     assert.equal(parseLookupResult({ ipa: "", senses: [] }), null);
+  });
+
+  it("returns empty fields when lookup fails and does not invent Chinese fallback copy", () => {
+    const src = readFileSync(new URL("./lookup.ts", import.meta.url), "utf8");
+    assert.match(src, /lemma: string/);
+    assert.match(src, /surface: string/);
+    assert.match(src, /sentenceContext: string/);
+    assert.match(src, /simpleEn/);
+    assert.match(src, /senses: \[\]/);
+    assert.doesNotMatch(src, /暂无中文释义|查词失败/);
   });
 });

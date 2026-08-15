@@ -27,10 +27,16 @@ export function isWholeSentence(span: WordSpan, wordCount: number): boolean {
   return wordCount > 0 && next.start === 0 && next.end === wordCount - 1;
 }
 
+/** Consecutive tokens for the word span, including punctuation inside the span. 整句 is every token. */
 export function tokensForSpan(tokens: Token[], span: WordSpan): Token[] {
   const words = wordTokens(tokens);
+  if (!words.length) return [];
   const next = clampSpan(span, words.length);
-  return words.slice(next.start, next.end + 1);
+  if (isWholeSentence(next, words.length)) return tokens;
+  const from = tokens.findIndex((token) => token.id === words[next.start]?.id);
+  const to = tokens.findIndex((token) => token.id === words[next.end]?.id);
+  if (from < 0 || to < 0) return words.slice(next.start, next.end + 1);
+  return tokens.slice(Math.min(from, to), Math.max(from, to) + 1);
 }
 
 export function spanFromSelected(tokens: Token[], selected: Token[]): WordSpan {

@@ -40,18 +40,12 @@ export function ResultScreen() {
   const [copied, setCopied] = useState(false);
   const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
   const [speakError, setSpeakError] = useState<string | null>(null);
-  const [repeatOpen, setRepeatOpen] = useState(false);
   const { mode, playingId, toggle, playOnce, stop } = useArticleSpeech(
     sentences,
     () => setSpeakError(SPEAK_FAIL_TEXT),
     conversionId
   );
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
-  const showRepeatOptions = repeatOpen || mode === "loopOne" || mode === "loopAll";
-
-  useEffect(() => {
-    setRepeatOpen(false);
-  }, [conversionId]);
 
   useEffect(() => {
     if (!conversion || conversion.status !== "loading") return;
@@ -88,33 +82,11 @@ export function ResultScreen() {
 
   const onPlayAll = (): void => {
     setSpeakError(null);
-    setRepeatOpen(false);
     toggle("all");
   };
 
-  const onOpenRepeat = (): void => {
+  const onRepeat = (): void => {
     setSpeakError(null);
-    if (mode !== "idle") stop();
-    setRepeatOpen(true);
-  };
-
-  const onRepeatThis = (): void => {
-    setSpeakError(null);
-    if (mode === "loopOne") {
-      setRepeatOpen(false);
-      stop();
-      return;
-    }
-    toggle("loopOne");
-  };
-
-  const onRepeatAll = (): void => {
-    setSpeakError(null);
-    if (mode === "loopAll") {
-      setRepeatOpen(false);
-      stop();
-      return;
-    }
     toggle("loopAll");
   };
 
@@ -155,25 +127,11 @@ export function ResultScreen() {
             </Text>
           </Pressable>
           <Text style={styles.listenPipe}>|</Text>
-          {showRepeatOptions ? (
-            <>
-              <Pressable onPress={onRepeatThis} hitSlop={8}>
-                <Text style={mode === "loopOne" ? styles.listenOn : styles.listenText}>
-                  {mode === "loopOne" ? "停止" : "这句"}
-                </Text>
-              </Pressable>
-              <Text style={styles.listenPipe}>|</Text>
-              <Pressable onPress={onRepeatAll} hitSlop={8}>
-                <Text style={mode === "loopAll" ? styles.listenOn : styles.listenText}>
-                  {mode === "loopAll" ? "停止" : "全文"}
-                </Text>
-              </Pressable>
-            </>
-          ) : (
-            <Pressable onPress={onOpenRepeat} hitSlop={8}>
-              <Text style={styles.listenText}>复读</Text>
-            </Pressable>
-          )}
+          <Pressable onPress={onRepeat} hitSlop={8}>
+            <Text style={mode === "loopAll" ? styles.listenOn : styles.listenText}>
+              {mode === "loopAll" ? "停止" : "复读"}
+            </Text>
+          </Pressable>
         </View>
       ) : null}
       {conversion.status === "loading" ? <SentenceList sentences={[]} loading /> : null}

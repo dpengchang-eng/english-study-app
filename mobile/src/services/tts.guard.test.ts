@@ -13,14 +13,13 @@ describe("listen tts", () => {
     assert.doesNotMatch(pkg, /expo-speech-recognition/);
   });
 
-  it("locks the result row to 听全文 | 复读 with 这句 / 全文", () => {
+  it("locks the result row to 听全文 | 复读 with no 这句 option", () => {
     const result = readFileSync(new URL("../screens/ResultScreen.tsx", import.meta.url), "utf8");
     const list = readFileSync(new URL("../components/SentenceList.tsx", import.meta.url), "utf8");
     const hook = readFileSync(new URL("../hooks/useArticleSpeech.ts", import.meta.url), "utf8");
+    const planner = readFileSync(new URL("./articleSpeech.ts", import.meta.url), "utf8");
     assert.match(result, /听全文/);
     assert.match(result, /复读/);
-    assert.match(result, /这句/);
-    assert.match(result, /全文/);
     assert.match(result, /停止/);
     assert.match(result, /listenPipe/);
     assert.match(list, />听</);
@@ -29,9 +28,14 @@ describe("listen tts", () => {
     assert.match(hook, /useFocusEffect/);
     assert.match(hook, /AppState/);
     assert.match(hook, /stopSpeaking/);
+    assert.match(hook, /loopAll/);
     assert.match(result, /stop\(\);\s*setPicked\(null\);\s*openLookup/s);
+    assert.doesNotMatch(result, /这句/);
     assert.doesNotMatch(result, /单句循环/);
-    assert.doesNotMatch(result, /全文循环/);
+    assert.doesNotMatch(result, /loopOne/);
+    assert.doesNotMatch(hook, /loopOne/);
+    assert.doesNotMatch(planner, /loopOne/);
+    assert.doesNotMatch(planner, /这句/);
     assert.doesNotMatch(result, /expo-speech-recognition/);
     assert.doesNotMatch(result, /SENTENCE_CAP/);
   });

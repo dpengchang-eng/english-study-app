@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Token, WordbookItem } from "../types";
+import { readFileSync } from "node:fs";
 import { blankParts, offsetsFromTokens, resolveBlankSpan } from "./blank";
 import { clozeAnswerLine } from "./practice";
 import { applyBox, nextGoodBox } from "./practiceSrs";
@@ -63,6 +64,47 @@ describe("blankParts", () => {
     const toText = "I like to cook.";
     const toSpan = resolveBlankSpan(toText, "to", 0, 1);
     assert.equal(toText.slice(toSpan.start, toSpan.end), "to");
+  });
+
+  it("does not blank a letter inside a longer word when a/to/I have no standalone hit", () => {
+    const apple = "Apple pie.";
+    const aSpan = resolveBlankSpan(apple, "a", 0, 1);
+    assert.notEqual(apple.slice(aSpan.start, aSpan.end).toLowerCase(), "a");
+    assert.equal(aSpan.start, aSpan.end);
+    assert.equal(apple.slice(0, 1), "A");
+
+    const today = "See you tomorrow.";
+    const toSpan = resolveBlankSpan(today, "to", 0, 2);
+    assert.notEqual(today.slice(toSpan.start, toSpan.end).toLowerCase(), "to");
+    assert.ok(today.toLowerCase().includes("to"));
+
+    const italy = "Visit Italy.";
+    const iSpan = resolveBlankSpan(italy, "I", 6, 7);
+    assert.notEqual(italy.slice(iSpan.start, iSpan.end), "I");
+    assert.equal(italy[6], "I");
+  });
+
+  it("uses the whole saved span when the phrase is missing and the span is a whole word", () => {
+    const sentence = "See you tomorrow.";
+    const span = resolveBlankSpan(sentence, "xyz", 0, 3);
+    assert.equal(sentence.slice(span.start, span.end), "See");
+  });
+
+  it("blankParts misses cleanly on Apple pie instead of carving A", () => {
+    const { before, after } = blankParts(
+      { wordbookItemId: "a", sentenceText: "Apple pie.", blankSpan: { start: 0, end: 1 }, hintGloss: "" },
+      "a"
+    );
+    assert.equal(before, "Apple pie.");
+    assert.equal(after, "");
+  });
+});
+
+describe("blank search has no substring fallback", () => {
+  it("does not use indexOf / indexInsensitive after a whole-word miss", () => {
+    const src = readFileSync(new URL("./blank.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(src, /indexInsensitive/);
+    assert.doesNotMatch(src, /indexOf/);
   });
 });
 

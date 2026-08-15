@@ -3,20 +3,26 @@ import type { PracticeCard } from "../types";
 /** Same-width blank every time so the gap does not leak the answer length. */
 export const FIXED_BLANK = "________";
 
-function indexInsensitive(hay: string, needle: string): number {
-  return hay.toLowerCase().indexOf(needle.toLowerCase());
-}
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Whole-word first so short words like "a" / "to" are not a letter inside another word. */
+function isAlnum(ch: string | undefined): boolean {
+  return Boolean(ch && /[A-Za-z0-9]/.test(ch));
+}
+
+/** Whole word or whole selection: not a letter carved out of a longer word. */
+function isWholeSpan(sentence: string, start: number, end: number): boolean {
+  if (end <= start) return false;
+  return !isAlnum(sentence[start - 1]) && !isAlnum(sentence[end]);
+}
+
+/** Whole-word only. No substring fallback — "a" must not hit the A in Apple. */
 function findPhraseIndex(hay: string, needle: string): number {
   const escaped = escapeRegExp(needle);
   const word = new RegExp(`(^|[^A-Za-z0-9])(${escaped})(?![A-Za-z0-9])`, "i").exec(hay);
   if (word && word[2] != null) return word.index + word[1].length;
-  return indexInsensitive(hay, needle);
+  return -1;
 }
 
 /** Missing Gemini offsets must not become 0..phrase.length. */
@@ -41,14 +47,24 @@ export function resolveBlankSpan(
   const needle = phrase.trim();
   if (needle) {
     const sliced = sentence.slice(start, end);
+    if (end > start && sliced.toLowerCase() === needle.toLowerCase() && isWholeSpan(sentence, start, end)) {
+      return { start, end };
+    }
     const inner = findPhraseIndex(sliced, needle);
-    if (inner >= 0) return { start: start + inner, end: start + inner + needle.length };
+    if (inner >= 0) {
+      const foundStart = start + inner;
+      const foundEnd = foundStart + needle.length;
+      if (isWholeSpan(sentence, foundStart, foundEnd)) return { start: foundStart, end: foundEnd };
+    }
     const found = findPhraseIndex(sentence, needle);
-    if (found >= 0) return { start: found, end: found + needle.length };
+    if (found >= 0) {
+      const foundEnd = found + needle.length;
+      if (isWholeSpan(sentence, found, foundEnd)) return { start: found, end: foundEnd };
+    }
     const flexible = findFlexiblePhrase(sentence, needle);
     if (flexible) return flexible;
   }
-  if (end > start) return { start, end };
+  if (end > start && isWholeSpan(sentence, start, end)) return { start, end };
   return { start: sentence.length, end: sentence.length };
 }
 
@@ -58,7 +74,10 @@ function findFlexiblePhrase(sentence: string, phrase: string): { start: number; 
   const escaped = words.map((word) => escapeRegExp(word));
   const match = new RegExp(escaped.join("\\s+"), "i").exec(sentence);
   if (!match) return null;
-  return { start: match.index, end: match.index + match[0].length };
+  const start = match.index;
+  const end = start + match[0].length;
+  if (!isWholeSpan(sentence, start, end)) return null;
+  return { start, end };
 }
 
 export function blankParts(card: PracticeCard, phrase?: string): { before: string; after: string } {

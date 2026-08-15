@@ -44,6 +44,11 @@ describe("listen tts", () => {
     assert.doesNotMatch(hook, /playingIdRef/);
     assert.match(hook, /speakAmerican\(item\.text, handlers, speedRef\.current\)/);
     assert.match(hook, /continueSpeaking\(item\.text, handlers, speedRef\.current\)/);
+    const homeListen = readFileSync(new URL("../hooks/useHomeArticleListen.ts", import.meta.url), "utf8");
+    assert.match(homeListen, /peekSpeechSpeed/);
+    assert.match(homeListen, /shouldApplyLoadedSpeed/);
+    assert.match(homeListen, /toggle\("all"\)/);
+    assert.doesNotMatch(homeListen, /loadSpeechSpeed\(\)\.then\(setSpeed\)/);
     const lookup = readFileSync(new URL("../screens/LookupScreen.tsx", import.meta.url), "utf8");
     assert.match(lookup, /speakAmerican\(phrase,/);
     assert.doesNotMatch(lookup, /loadSpeechSpeed|speechSpeedLabel|restartCurrent/);

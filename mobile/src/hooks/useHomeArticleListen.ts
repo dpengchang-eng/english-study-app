@@ -2,7 +2,12 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { conversionSpeakable } from "../services/homeChat";
-import { loadSpeechSpeed, type SpeechSpeed } from "../services/speechSpeed";
+import {
+  loadSpeechSpeed,
+  peekSpeechSpeed,
+  shouldApplyLoadedSpeed,
+  type SpeechSpeed
+} from "../services/speechSpeed";
 import type { Conversion } from "../types";
 import { useArticleSpeech } from "./useArticleSpeech";
 
@@ -11,16 +16,25 @@ export function useHomeArticleListen(recents: Conversion[]): {
   toggleListen: (id: string) => void;
   stopListen: () => void;
 } {
+  const [speed, setSpeed] = useState<SpeechSpeed>(peekSpeechSpeed);
   const [listenId, setListenId] = useState<string | null>(null);
-  const [speed, setSpeed] = useState<SpeechSpeed>(1);
   const item = recents.find((row) => row.id === listenId);
   const sentences = item ? conversionSpeakable(item) : [];
   const { mode, toggle, stop } = useArticleSpeech(sentences, () => undefined, listenId ?? "", speed);
   const pendingStart = useRef<string | null>(null);
   const playingId = useRef<string | null>(null);
+  const playingRef = useRef(false);
+  playingRef.current = mode === "all";
 
   useEffect(() => {
-    void loadSpeechSpeed().then(setSpeed);
+    let live = true;
+    void loadSpeechSpeed().then((saved) => {
+      if (!live || !shouldApplyLoadedSpeed(false, playingRef.current)) return;
+      setSpeed(saved);
+    });
+    return () => {
+      live = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -51,6 +65,7 @@ export function useHomeArticleListen(recents: Conversion[]): {
         stopListen();
         return;
       }
+      setSpeed(peekSpeechSpeed());
       pendingStart.current = id;
       setListenId(id);
     },
@@ -59,6 +74,9 @@ export function useHomeArticleListen(recents: Conversion[]): {
 
   useFocusEffect(
     useCallback(() => {
+      if (shouldApplyLoadedSpeed(false, playingRef.current)) {
+        setSpeed(peekSpeechSpeed());
+      }
       return () => stopListen();
     }, [stopListen])
   );

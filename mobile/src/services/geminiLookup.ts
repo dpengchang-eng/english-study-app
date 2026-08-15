@@ -1,6 +1,6 @@
 import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 import { firebaseApp } from "../firebase";
-import { parseLookupResult, type LookupResult } from "./lookup";
+import { parseLookupResult, type LookupQuery, type LookupResult } from "./lookup";
 
 const MODEL = "gemini-flash-lite-latest";
 
@@ -19,9 +19,13 @@ function parseJson(text: string): unknown {
 }
 
 const LOOKUP_PROMPT =
-  "Return JSON only with keys ipa, senses, and simpleEn. ipa is American English phonetic. senses is up to 3 short Simplified Chinese glosses. simpleEn is one short everyday English explanation, not a dictionary essay.";
+  "Return JSON only with keys ipa, pos, senses, and simpleEn. ipa is American English phonetic. pos is a short English part of speech or empty. senses is up to 3 short Simplified Chinese glosses. simpleEn is one short everyday English explanation, not a dictionary essay.";
 
-async function lookupRest(phrase: string, apiKey: string): Promise<LookupResult | null> {
+function lookupPrompt(query: LookupQuery): string {
+  return `${LOOKUP_PROMPT}\nLemma: ${query.lemma}\nPhrase: ${query.surface}\nSentence: ${query.sentenceContext}`;
+}
+
+async function lookupRest(query: LookupQuery, apiKey: string): Promise<LookupResult | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
@@ -37,7 +41,7 @@ async function lookupRest(phrase: string, apiKey: string): Promise<LookupResult 
               role: "user",
               parts: [
                 {
-                  text: `${LOOKUP_PROMPT}\nPhrase: ${phrase}`
+                  text: lookupPrompt(query)
                 }
               ]
             }
@@ -59,7 +63,7 @@ async function lookupRest(phrase: string, apiKey: string): Promise<LookupResult 
   }
 }
 
-async function lookupAiLogic(phrase: string): Promise<LookupResult | null> {
+async function lookupAiLogic(query: LookupQuery): Promise<LookupResult | null> {
   try {
     const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() });
     const model = getGenerativeModel(
@@ -71,7 +75,7 @@ async function lookupAiLogic(phrase: string): Promise<LookupResult | null> {
       { timeout: 8000 }
     );
     const result = await model.generateContent(
-      `${LOOKUP_PROMPT}\nPhrase: ${phrase}`
+      lookupPrompt(query)
     );
     return parseLookupResult(parseJson(result.response.text()));
   } catch {
@@ -79,8 +83,8 @@ async function lookupAiLogic(phrase: string): Promise<LookupResult | null> {
   }
 }
 
-export async function rewriteLookup(phrase: string): Promise<LookupResult | null> {
+export async function rewriteLookup(query: LookupQuery): Promise<LookupResult | null> {
   const key = geminiApiKey();
-  if (key) return lookupRest(phrase, key);
-  return lookupAiLogic(phrase);
+  if (key) return lookupRest(query, key);
+  return lookupAiLogic(query);
 }

@@ -90,6 +90,28 @@ export function selectWordTokens(selected: Token[], sentenceTokens: Token[] = se
   });
 }
 
+export function coversWholeSentence(selected: Token[], sentenceTokens: Token[]): boolean {
+  const all = sentenceTokens.filter((token) => token.isWord);
+  const words = selected.filter((token) => token.isWord);
+  return all.length > 0 && words.length === all.length;
+}
+
+/** 整句 blanks the whole sentence as one cloze gap. A shorter span blanks only that phrase. */
+export function wordbookBlankSpan(
+  sentenceText: string,
+  selected: Token[],
+  sentenceTokens: Token[],
+  phrase: string,
+  start: number,
+  end: number
+): { phrase: string; start: number; end: number } {
+  if (coversWholeSentence(selected, sentenceTokens)) {
+    return { phrase: sentenceText, start: 0, end: sentenceText.length };
+  }
+  const span = resolveBlankSpan(sentenceText, phrase, start, end);
+  return { phrase, start: span.start, end: span.end };
+}
+
 export function phraseFromTokens(tokens: Token[]): { phrase: string; lemmaKey: string; start: number; end: number } {
   const words = tokens.filter((token) => token.isWord);
   const phrase = words.map((token) => token.surface).join(" ").trim();
@@ -202,15 +224,21 @@ export async function saveToWordbook(
     senses: string[];
   }
 ): Promise<{ items: WordbookItem[]; created: boolean; item: WordbookItem }> {
-  const words = selectWordTokens(input.tokens, input.sentenceTokens ?? input.tokens);
-  const { phrase, lemmaKey, start, end } = phraseFromTokens(words);
-  if (!phrase) throw new Error("没有可保存的词");
-  const existing = current.find((item) => item.id === lemmaKey);
+  const sentenceTokens = input.sentenceTokens ?? input.tokens;
+  const words = selectWordTokens(
+    input.tokens.filter((token) => token.isWord),
+    sentenceTokens
+  );
+  const parsed = phraseFromTokens(words);
+  if (!parsed.phrase) throw new Error("没有可保存的词");
+  const existing = current.find((item) => item.id === parsed.lemmaKey);
   if (existing) {
     return { items: current, created: false, item: existing };
   }
   const sentenceText = input.sentenceText.slice(0, 760);
-  const span = resolveBlankSpan(sentenceText, phrase, start, end);
+  const span = wordbookBlankSpan(sentenceText, words, sentenceTokens, parsed.phrase, parsed.start, parsed.end);
+  const { lemmaKey } = parsed;
+  const phrase = span.phrase;
   const now = Date.now();
   const item: WordbookItem = {
     id: lemmaKey,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Token } from "../types";
-import { phraseFromTokens, SAVE_SPAN_ERROR, selectWordTokens } from "./wordbook";
+import { phraseFromTokens, SAVE_SPAN_ERROR, selectWordTokens, wordbookBlankSpan } from "./wordbook";
 import { tokensForSpan, wholeSentenceSpan } from "./lookupSelection";
 
 function word(id: string, surface: string, start: number): Token {
@@ -44,5 +44,15 @@ describe("selectWordTokens", () => {
 
   it("rejects a hole in the span", () => {
     assert.throws(() => selectWordTokens([sentence[0], sentence[2]], sentence), new Error(SAVE_SPAN_ERROR));
+  });
+
+  it("blanks the whole sentence when the span is 整句", () => {
+    const text = "I'd like to grab coffee with you sometime.";
+    const span = wordbookBlankSpan(text, sentence, sentence, "I'd like to grab coffee with you sometime", 0, 41);
+    assert.equal(span.phrase, text);
+    assert.equal(span.start, 0);
+    assert.equal(span.end, text.length);
+    const part = wordbookBlankSpan(text, [sentence[4]], sentence, "coffee", 17, 23);
+    assert.equal(text.slice(part.start, part.end), "coffee");
   });
 });

@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { clipLookup, lookupPhrase, parseLookupResult, type LookupResult } from "./lookup";
+import { clipLookup, lookupWord, parseLookupResult, type LookupResult } from "./lookup";
 
 describe("LookupResult", () => {
-  it("includes simpleEn on local cache hits", async () => {
-    const result: LookupResult = await lookupPhrase("coffee", "coffee");
+  it("includes simpleEn on local cache hits via lookupWord", async () => {
+    const result: LookupResult = await lookupWord({
+      lemma: "coffee",
+      surface: "coffee",
+      sentenceContext: "I'd like to grab coffee with you."
+    });
     assert.equal(typeof result.simpleEn, "string");
     assert.ok(result.simpleEn.length > 0);
     assert.ok(result.senses.includes("咖啡"));
     assert.equal("simpleEn" in result, true);
+    assert.equal(result.pos, "noun");
   });
 
   it("keeps Chinese when simpleEn is missing and fills an empty string", () => {
@@ -16,19 +21,22 @@ describe("LookupResult", () => {
     assert.ok(parsed);
     assert.deepEqual(parsed.senses, ["随手拿", "抓住"]);
     assert.equal(parsed.simpleEn, "");
+    assert.equal(parsed.pos, "");
     const clipped = clipLookup(parsed);
     assert.equal(clipped.simpleEn, "");
-    assert.equal(clipLookup({ ipa: "", senses: ["中文"], simpleEn: "  take it  " }).simpleEn, "take it");
+    assert.equal(clipLookup({ ipa: "", pos: "verb", senses: ["中文"], simpleEn: "  take it  " }).simpleEn, "take it");
   });
 
-  it("reads simpleEn from Gemini-shaped JSON", () => {
+  it("reads simpleEn and pos from Gemini-shaped JSON", () => {
     const parsed = parseLookupResult({
       ipa: "/ˈkɔfi/",
+      pos: "noun",
       senses: ["咖啡"],
       simpleEn: "a hot drink from coffee beans"
     });
     assert.ok(parsed);
     assert.equal(parsed.simpleEn, "a hot drink from coffee beans");
+    assert.equal(parsed.pos, "noun");
     assert.equal(parseLookupResult({ ipa: "", senses: [] }), null);
   });
 });

@@ -5,10 +5,10 @@ import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
 import { ensureTappableTokens } from "../services/align";
-import { lookupPhrase } from "../services/lookup";
+import { lookupWord } from "../services/lookup";
 import {
+  firstWordSpan,
   isWholeSentence,
-  sentenceChangeSpan,
   spanFromSelected,
   tapLookupWord,
   tokensForSpan,
@@ -16,6 +16,7 @@ import {
   wordTokens,
   type WordSpan
 } from "../services/lookupSelection";
+import { peekSpeechSpeed } from "../services/speechSpeed";
 import { phraseFromTokens, SAVE_SPAN_ERROR } from "../services/wordbook";
 import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
@@ -54,27 +55,36 @@ export function LookupScreen() {
   const [span, setSpan] = useState<WordSpan>(() =>
     spanFromSelected(route.params.sentenceTokens ?? route.params.tokens, route.params.tokens)
   );
-  const [preferWhole, setPreferWhole] = useState(false);
   const { items, savePhrase } = useWordbook();
   const sentence = sentences[sentenceIndex] ?? sentences[0];
   const tokens = sentence?.tokens ?? [];
   const words = wordTokens(tokens);
   const selected = tokensForSpan(tokens, span);
-  const { phrase, lemmaKey } = phraseFromTokens(selected);
+  const wholeOn = isWholeSentence(span, words.length);
+  const phrase = wholeOn ? (sentence?.text ?? route.params.sentenceText) : phraseFromTokens(selected).phrase;
+  const lemma = selected[0]?.lemma || phraseFromTokens(selected).lemmaKey;
+  const lemmaKey = phraseFromTokens(selected).lemmaKey;
   const alreadySaved = items.some((item) => item.id === lemmaKey);
   const [ipa, setIpa] = useState("");
+  const [pos, setPos] = useState("");
   const [senses, setSenses] = useState<string[]>([]);
   const [simpleEn, setSimpleEn] = useState("");
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState<string | null>(alreadySaved ? "已在词本" : null);
   const [speakError, setSpeakError] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
   const canPrev = sentenceIndex > 0;
   const canNext = sentenceIndex < sentences.length - 1;
-  const wholeOn = isWholeSentence(span, words.length);
+  const sentenceContext = sentence?.text ?? route.params.sentenceText;
 
   useEffect(() => {
     return () => stopSpeaking();
   }, []);
+
+  useEffect(() => {
+    stopSpeaking();
+    setListening(false);
+  }, [lemmaKey, sentenceIndex]);
 
   useEffect(() => {
     setSaved(alreadySaved ? "已在词本" : null);
@@ -84,12 +94,14 @@ export function LookupScreen() {
     let live = true;
     setLoading(true);
     setIpa("");
+    setPos("");
     setSenses([]);
     setSimpleEn("");
-    void lookupPhrase(phrase, lemmaKey)
+    void lookupWord({ lemma, surface: phrase, sentenceContext })
       .then((result) => {
         if (!live) return;
         setIpa(result.ipa);
+        setPos(result.pos);
         setSenses(result.senses.slice(0, 3));
         setSimpleEn(result.simpleEn);
         setLoading(false);
@@ -97,6 +109,7 @@ export function LookupScreen() {
       .catch(() => {
         if (!live) return;
         setIpa("");
+        setPos("");
         setSenses(["查词失败，请再试一次"]);
         setSimpleEn("");
         setLoading(false);
@@ -104,38 +117,57 @@ export function LookupScreen() {
     return () => {
       live = false;
     };
-  }, [lemmaKey, phrase]);
+  }, [lemma, phrase, sentenceContext]);
 
   const tapWord = (token: Token): void => {
     const index = words.findIndex((word) => word.id === token.id);
     if (index < 0) return;
-    setPreferWhole(false);
     setSpan(tapLookupWord(span, index));
   };
 
   const selectWhole = (): void => {
-    setPreferWhole(true);
     setSpan(wholeSentenceSpan(words.length));
   };
 
   const moveSentence = (delta: number): void => {
     const nextIndex = sentenceIndex + delta;
     if (nextIndex < 0 || nextIndex >= sentences.length) return;
-    const nextWords = wordTokens(sentences[nextIndex]?.tokens ?? []);
     setSentenceIndex(nextIndex);
-    setSpan(sentenceChangeSpan(nextWords.length, preferWhole));
+    setSpan(firstWordSpan());
+  };
+
+  const toggleListen = (): void => {
+    if (listening) {
+      stopSpeaking();
+      setListening(false);
+      return;
+    }
+    setSpeakError(null);
+    setListening(true);
+    speakAmerican(
+      phrase,
+      {
+        onError: () => {
+          setListening(false);
+          setSpeakError(SPEAK_FAIL_TEXT);
+        },
+        onDone: () => setListening(false),
+        onStopped: () => setListening(false)
+      },
+      peekSpeechSpeed()
+    );
   };
 
   const save = async (): Promise<void> => {
-    if (loading) return;
     try {
+      const failed = senses[0] === "查词失败，请再试一次" || senses[0] === "暂无中文释义";
       const result = await savePhrase({
-        tokens: selected.length ? selected : words.slice(0, 1),
+        tokens: wholeOn ? tokens : selected,
         sentenceTokens: tokens,
-        sentenceText: sentence?.text ?? route.params.sentenceText,
+        sentenceText: sentenceContext,
         conversionId: route.params.conversionId,
         ipa,
-        senses: senses.slice(0, 3)
+        senses: failed ? [] : senses.slice(0, 3)
       });
       if (!result.created) {
         setSaved("已在词本");
@@ -149,36 +181,38 @@ export function LookupScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <Text style={styles.phrase}>{phrase || lemmaKey}</Text>
       <View style={styles.sentence}>
         {tokens.map((token) =>
           token.isWord ? (
             <Pressable
               key={token.id}
               onPress={() => tapWord(token)}
-              style={[styles.word, selected.some((item) => item.id === token.id) && styles.wordOn]}
+              style={[styles.word, (wholeOn || selected.some((item) => item.id === token.id)) && styles.wordOn]}
             >
               <Text style={styles.wordText}>{token.surface}</Text>
             </Pressable>
           ) : (
-            <Text key={token.id} style={styles.punct}>
+            <Text key={token.id} style={[styles.punct, wholeOn && styles.wordOn]}>
               {token.surface}
             </Text>
           )
         )}
       </View>
       <View style={styles.nav}>
-        <Pressable style={[styles.chip, wholeOn && styles.chipOn]} onPress={selectWhole}>
-          <Text style={styles.chipText}>整句</Text>
+        <Pressable onPress={() => moveSentence(-1)} disabled={!canPrev} hitSlop={8}>
+          <Text style={!canPrev ? styles.navOff : styles.navText}>上一句</Text>
         </Pressable>
-        <Pressable style={[styles.chip, !canPrev && styles.off]} onPress={() => moveSentence(-1)} disabled={!canPrev}>
-          <Text style={styles.chipText}>上一句</Text>
+        <Text style={styles.navPipe}>|</Text>
+        <Pressable onPress={selectWhole} hitSlop={8}>
+          <Text style={wholeOn ? styles.navOn : styles.navText}>整句</Text>
         </Pressable>
-        <Pressable style={[styles.chip, !canNext && styles.off]} onPress={() => moveSentence(1)} disabled={!canNext}>
-          <Text style={styles.chipText}>下一句</Text>
+        <Text style={styles.navPipe}>|</Text>
+        <Pressable onPress={() => moveSentence(1)} disabled={!canNext} hitSlop={8}>
+          <Text style={!canNext ? styles.navOff : styles.navText}>下一句</Text>
         </Pressable>
       </View>
       {loading ? <ActivityIndicator color={colors.accent} /> : null}
+      {!loading && pos ? <Text style={styles.pos}>{pos}</Text> : null}
       {!loading && ipa ? <Text style={styles.ipa}>{ipa}</Text> : null}
       {!loading
         ? senses.slice(0, 3).map((sense) => (
@@ -189,17 +223,11 @@ export function LookupScreen() {
         : null}
       {!loading && simpleEn ? <Text style={styles.simpleEn}>{simpleEn}</Text> : null}
       <View style={styles.row}>
-        <Pressable
-          style={styles.ghost}
-          onPress={() => {
-            setSpeakError(null);
-            speakAmerican(phrase, () => setSpeakError(SPEAK_FAIL_TEXT));
-          }}
-        >
+        <Pressable style={styles.ghost} onPress={toggleListen}>
           <Text style={styles.ghostText}>听</Text>
         </Pressable>
-        <Pressable style={[styles.btn, loading && styles.off]} onPress={() => void save()} disabled={loading}>
-          <Text style={styles.btnText}>存入词本</Text>
+        <Pressable style={styles.btn} onPress={() => void save()}>
+          <Text style={styles.btnText}>加入词本</Text>
         </Pressable>
       </View>
       {speakError ? <Text style={styles.warn}>{speakError}</Text> : null}
@@ -213,16 +241,17 @@ export function LookupScreen() {
 
 const styles = StyleSheet.create({
   page: { padding: space.lg, gap: 10, backgroundColor: colors.card, flexGrow: 1 },
-  phrase: { fontSize: 26, fontWeight: "800", color: colors.ink },
   sentence: { flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
   word: { paddingHorizontal: 2, paddingVertical: 2, borderRadius: 6 },
   wordOn: { backgroundColor: colors.chipOn },
   wordText: { color: colors.ink, fontSize: 18, lineHeight: 28 },
   punct: { color: colors.ink, fontSize: 18, lineHeight: 28 },
-  nav: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { backgroundColor: colors.accentSoft, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
-  chipOn: { backgroundColor: colors.chipOn },
-  chipText: { color: colors.ink, fontWeight: "700" },
+  nav: { flexDirection: "row", alignItems: "center", gap: 10 },
+  navText: { color: colors.ink, fontWeight: "700", fontSize: 16 },
+  navOn: { color: colors.accent, fontWeight: "700", fontSize: 16 },
+  navOff: { color: colors.muted, fontWeight: "700", fontSize: 16 },
+  navPipe: { color: colors.muted, fontSize: 16 },
+  pos: { color: colors.muted, fontSize: 14, textTransform: "lowercase" },
   ipa: { color: colors.muted, fontSize: 16 },
   sense: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   simpleEn: { color: colors.ink, fontSize: 16, lineHeight: 24 },
@@ -233,6 +262,5 @@ const styles = StyleSheet.create({
   ghostText: { color: colors.ink, fontWeight: "700" },
   note: { color: colors.good, fontSize: 14 },
   warn: { color: colors.warn, fontSize: 14 },
-  off: { opacity: 0.45 },
   close: { color: colors.muted, marginTop: 8 }
 });

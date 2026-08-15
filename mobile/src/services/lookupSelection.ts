@@ -22,11 +22,6 @@ export function firstWordSpan(): WordSpan {
   return { start: 0, end: 0 };
 }
 
-/** After 上一句 / 下一句: keep 整句 if that was last used, else the first word. */
-export function sentenceChangeSpan(wordCount: number, preferWhole: boolean): WordSpan {
-  return preferWhole ? wholeSentenceSpan(wordCount) : firstWordSpan();
-}
-
 export function isWholeSentence(span: WordSpan, wordCount: number): boolean {
   const next = clampSpan(span, wordCount);
   return wordCount > 0 && next.start === 0 && next.end === wordCount - 1;
@@ -47,17 +42,18 @@ export function spanFromSelected(tokens: Token[], selected: Token[]): WordSpan {
 }
 
 /**
- * Tap a word to grow or shrink a consecutive span. No holes.
- * Outside the span grows to that word. An endpoint shrinks that side.
- * A word inside moves the nearer end.
+ * frontend-word-sentence.md:
+ * adjacent isWord at either end → grow
+ * a word inside near one end → shrink that end to the word
+ * a non-adjacent word → jump to only that word
  */
 export function tapLookupWord(span: WordSpan, tapped: number): WordSpan {
   if (!Number.isInteger(tapped) || tapped < 0) return span;
-  if (tapped < span.start) return { start: tapped, end: span.end };
-  if (tapped > span.end) return { start: span.start, end: tapped };
+  if (tapped === span.start - 1) return { start: tapped, end: span.end };
+  if (tapped === span.end + 1) return { start: span.start, end: tapped };
+  if (tapped < span.start - 1 || tapped > span.end + 1) return { start: tapped, end: tapped };
   if (tapped === span.start && tapped === span.end) return span;
-  if (tapped === span.start) return { start: span.start + 1, end: span.end };
-  if (tapped === span.end) return { start: span.start, end: span.end - 1 };
+  if (tapped === span.start || tapped === span.end) return { start: tapped, end: tapped };
   const left = tapped - span.start;
   const right = span.end - tapped;
   if (left <= right) return { start: tapped, end: span.end };

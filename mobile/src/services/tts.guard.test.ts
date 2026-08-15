@@ -14,6 +14,7 @@ describe("listen tts", () => {
   });
 
   it("keeps 听全文 | 复读 on top and 听 + 循环 on each sentence", () => {
+    const tts = readFileSync(new URL("./tts.ts", import.meta.url), "utf8");
     const result = readFileSync(new URL("../screens/ResultScreen.tsx", import.meta.url), "utf8");
     const list = readFileSync(new URL("../components/SentenceList.tsx", import.meta.url), "utf8");
     const hook = readFileSync(new URL("../hooks/useArticleSpeech.ts", import.meta.url), "utf8");
@@ -33,8 +34,28 @@ describe("listen tts", () => {
     assert.match(hook, /AppState/);
     assert.match(hook, /stopSpeaking/);
     assert.match(hook, /loopOne/);
+    assert.match(hook, /modeRef/);
+    assert.match(hook, /decideListenAction/);
+    assert.match(hook, /getCurrentRoute/);
+    assert.match(hook, /Lookup/);
+    assert.doesNotMatch(hook, /stopSpeaking\(\);\s*speakAt/);
     assert.match(planner, /loopOne/);
+    assert.match(planner, /decideListenAction/);
+    assert.match(planner, /revealScrollY/);
+    assert.match(tts, /onStart/);
+    assert.match(tts, /speechWanted/);
+    assert.match(tts, /shouldStop/);
+    assert.match(result, /SPEAK_EMPTY_TEXT/);
+    assert.match(result, /revealScrollY/);
+    assert.match(result, /scrollTo/);
     assert.match(result, /stop\(\);\s*setPicked\(null\);\s*openLookup/s);
+    assert.match(list, /onSentenceLayout/);
+    assert.match(list, /canListen/);
+    assert.match(list, /isSpeakable/);
+    assert.match(hook, /missingPlayItemAction/);
+    assert.match(hook, /gate === "stop"/);
+    assert.match(planner, /isSpeakable/);
+    assert.match(planner, /missingPlayItemAction/);
     assert.doesNotMatch(result, /这句/);
     assert.doesNotMatch(list, /这句/);
     assert.doesNotMatch(result, /单句循环/);

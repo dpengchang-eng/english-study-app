@@ -1,6 +1,7 @@
+import { useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ensureTappableTokens } from "../services/align";
-import type { ArticlePlayMode } from "../services/articleSpeech";
+import { isSpeakable, type ArticlePlayMode } from "../services/articleSpeech";
 import type { Sentence, Token } from "../types";
 import { colors, space } from "../theme";
 
@@ -13,7 +14,8 @@ export function SentenceList({
   onPlay,
   onLoop,
   onTapToken,
-  onLongPressToken
+  onLongPressToken,
+  onSentenceLayout
 }: {
   sentences: Sentence[];
   loading?: boolean;
@@ -24,7 +26,11 @@ export function SentenceList({
   onLoop?: (sentence: Sentence) => void;
   onTapToken?: (sentence: Sentence, token: Token) => void;
   onLongPressToken?: (sentence: Sentence, token: Token) => void;
+  onSentenceLayout?: (id: string, y: number, height: number) => void;
 }) {
+  const listYRef = useRef(0);
+  const locals = useRef<Record<string, { y: number; h: number }>>({});
+
   if (loading) {
     return (
       <View style={styles.list}>
@@ -37,14 +43,37 @@ export function SentenceList({
 
   const selected = new Set(selectedIds ?? []);
 
+  const report = (id: string) => {
+    const local = locals.current[id];
+    if (!local || !onSentenceLayout) return;
+    onSentenceLayout(id, listYRef.current + local.y, local.h);
+  };
+
   return (
-    <View style={styles.list}>
+    <View
+      style={styles.list}
+      onLayout={(event) => {
+        listYRef.current = event.nativeEvent.layout.y;
+        for (const id of Object.keys(locals.current)) report(id);
+      }}
+    >
       {sentences.map((sentence) => {
         const tokens = ensureTappableTokens(sentence);
         const hasWords = tokens.some((token) => token.isWord);
         const tappable = { ...sentence, tokens };
+        const canListen = isSpeakable(sentence.text);
         return (
-          <View key={sentence.id} style={[styles.card, sentence.id === playingId && styles.cardOn]}>
+          <View
+            key={sentence.id}
+            style={[styles.card, sentence.id === playingId && styles.cardOn]}
+            onLayout={(event) => {
+              locals.current[sentence.id] = {
+                y: event.nativeEvent.layout.y,
+                h: event.nativeEvent.layout.height
+              };
+              report(sentence.id);
+            }}
+          >
             <View style={styles.row}>
               <View style={styles.words}>
                 {hasWords
@@ -68,7 +97,7 @@ export function SentenceList({
                     <Text style={styles.plain}>{sentence.text}</Text>
                   )}
               </View>
-              {onPlay || onLoop ? (
+              {canListen && (onPlay || onLoop) ? (
                 <View style={styles.plays}>
                   {onPlay ? (
                     <Pressable

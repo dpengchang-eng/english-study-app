@@ -1,6 +1,39 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { indexById, nextPlayIndex, resolveStartIndex, speakableItems } from "./articleSpeech";
+import {
+  decideListenAction,
+  indexById,
+  isSpeakable,
+  missingPlayItemAction,
+  nextPlayIndex,
+  resolveStartIndex,
+  revealScrollY,
+  speakableItems
+} from "./articleSpeech";
+
+describe("isSpeakable", () => {
+  it("treats blank and whitespace lines as not listen-able", () => {
+    assert.equal(isSpeakable("Hello."), true);
+    assert.equal(isSpeakable(""), false);
+    assert.equal(isSpeakable("   "), false);
+  });
+});
+
+describe("missingPlayItemAction", () => {
+  it("stops the current session when the playlist row is gone", () => {
+    assert.equal(missingPlayItemAction(undefined, 3, 3), "stop");
+    assert.equal(missingPlayItemAction(null, 1, 1), "stop");
+  });
+
+  it("ignores a stale session so a newer play is not closed", () => {
+    assert.equal(missingPlayItemAction(undefined, 2, 4), "skip");
+    assert.equal(missingPlayItemAction({ id: "s0" }, 2, 4), "skip");
+  });
+
+  it("plays when the row is still there", () => {
+    assert.equal(missingPlayItemAction({ id: "s0" }, 3, 3), "play");
+  });
+});
 
 describe("speakableItems", () => {
   it("drops blank sentences so a long article still plays the real lines", () => {
@@ -25,8 +58,17 @@ describe("resolveStartIndex", () => {
   it("starts 听 and 循环 on that sentence", () => {
     assert.equal(resolveStartIndex("once", 4, 3), 3);
     assert.equal(resolveStartIndex("loopOne", 4, 2), 2);
-    assert.equal(resolveStartIndex("once", 4, null), 0);
-    assert.equal(resolveStartIndex("loopOne", 4, null), 0);
+  });
+
+  it("does not fall back to sentence 1 when 听 / 循环 has no line", () => {
+    assert.equal(resolveStartIndex("once", 4, null), null);
+    assert.equal(resolveStartIndex("loopOne", 4, null), null);
+    const items = speakableItems([
+      { id: "blank", text: "   " },
+      { id: "real", text: "Hello." }
+    ]);
+    assert.equal(indexById(items, "blank"), null);
+    assert.equal(resolveStartIndex("once", items.length, indexById(items, "blank")), null);
   });
 
   it("returns null when there is nothing to read", () => {
@@ -89,5 +131,55 @@ describe("article playthrough", () => {
 
   it("keeps per-sentence 听 as play once", () => {
     assert.deepEqual(heard("once", 5, 3, 10), [3]);
+  });
+
+  it("plays nothing when the article has no speakable lines", () => {
+    assert.deepEqual(heard("all", 0, 0, 10), []);
+    assert.deepEqual(heard("loopAll", 0, null, 10), []);
+    assert.deepEqual(heard("once", 0, 0, 10), []);
+  });
+});
+
+describe("decideListenAction", () => {
+  it("stops when the same control is tapped again", () => {
+    assert.equal(decideListenAction("all", "s0", { kind: "all" }).action, "stop");
+    assert.equal(decideListenAction("loopAll", "s2", { kind: "loopAll" }).action, "stop");
+    assert.equal(decideListenAction("once", "s1", { kind: "once", id: "s1" }).action, "stop");
+    assert.equal(decideListenAction("loopOne", "s1", { kind: "loopOne", id: "s1" }).action, "stop");
+  });
+
+  it("starts the other mode so only one of the four is live", () => {
+    assert.deepEqual(decideListenAction("all", "s0", { kind: "loopAll" }), { action: "start", mode: "loopAll" });
+    assert.deepEqual(decideListenAction("loopAll", "s0", { kind: "all" }), { action: "start", mode: "all" });
+    assert.deepEqual(decideListenAction("all", "s2", { kind: "once", id: "s2" }), {
+      action: "start",
+      mode: "once",
+      id: "s2"
+    });
+    assert.deepEqual(decideListenAction("once", "s1", { kind: "loopOne", id: "s1" }), {
+      action: "start",
+      mode: "loopOne",
+      id: "s1"
+    });
+    assert.deepEqual(decideListenAction("loopOne", "s1", { kind: "once", id: "s2" }), {
+      action: "start",
+      mode: "once",
+      id: "s2"
+    });
+    assert.deepEqual(decideListenAction("idle", null, { kind: "all" }), { action: "start", mode: "all" });
+  });
+});
+
+describe("revealScrollY", () => {
+  it("leaves the card alone when it is already on screen", () => {
+    assert.equal(revealScrollY(100, 80, 0, 400), null);
+  });
+
+  it("scrolls down when 听全文 walks past the fold", () => {
+    assert.equal(revealScrollY(500, 80, 0, 400, 16), 196);
+  });
+
+  it("scrolls up when 复读 wraps back to sentence 1", () => {
+    assert.equal(revealScrollY(0, 80, 600, 400, 16), 0);
   });
 });

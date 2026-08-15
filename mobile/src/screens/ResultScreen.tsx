@@ -1,7 +1,7 @@
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Clipboard from "expo-clipboard";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { EmptyHint } from "../components/EmptyHint";
 import { ErrorState } from "../components/ErrorState";
@@ -12,7 +12,8 @@ import { auth } from "../firebase";
 import { openLookup } from "../navigation/rootNav";
 import type { ConvertStackParamList } from "../navigation/types";
 import { ensureTappableTokens } from "../services/align";
-import { SPEAK_FAIL_TEXT } from "../services/tts";
+import { revealScrollY } from "../services/articleSpeech";
+import { SPEAK_EMPTY_TEXT, SPEAK_FAIL_TEXT } from "../services/tts";
 import { colors, space } from "../theme";
 import { CONVERT_WAIT_MS, type Sentence, type Token } from "../types";
 
@@ -46,6 +47,22 @@ export function ResultScreen() {
     conversionId
   );
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(0);
+  const viewportRef = useRef(0);
+  const cardPos = useRef<Record<string, { y: number; h: number }>>({});
+
+  const revealPlaying = (id: string | null) => {
+    if (!id) return;
+    const pos = cardPos.current[id];
+    if (!pos) return;
+    const next = revealScrollY(pos.y, pos.h, scrollYRef.current, viewportRef.current);
+    if (next != null) scrollRef.current?.scrollTo({ y: next, animated: true });
+  };
+
+  useEffect(() => {
+    revealPlaying(playingId);
+  }, [playingId]);
 
   useEffect(() => {
     if (!conversion || conversion.status !== "loading") return;
@@ -77,22 +94,22 @@ export function ResultScreen() {
 
   const play = (sentence: Sentence): void => {
     setSpeakError(null);
-    playOnce(sentence.id);
+    if (!playOnce(sentence.id)) setSpeakError(SPEAK_EMPTY_TEXT);
   };
 
   const loop = (sentence: Sentence): void => {
     setSpeakError(null);
-    loopOne(sentence.id);
+    if (!loopOne(sentence.id)) setSpeakError(SPEAK_EMPTY_TEXT);
   };
 
   const onPlayAll = (): void => {
     setSpeakError(null);
-    toggle("all");
+    if (!toggle("all")) setSpeakError(SPEAK_EMPTY_TEXT);
   };
 
   const onRepeat = (): void => {
     setSpeakError(null);
-    toggle("loopAll");
+    if (!toggle("loopAll")) setSpeakError(SPEAK_EMPTY_TEXT);
   };
 
   const openTokens = (sentence: Sentence, tokens: Token[]): void => {
@@ -122,7 +139,17 @@ export function ResultScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
+    <ScrollView
+      ref={scrollRef}
+      contentContainerStyle={styles.page}
+      onLayout={(event) => {
+        viewportRef.current = event.nativeEvent.layout.height;
+      }}
+      onScroll={(event) => {
+        scrollYRef.current = event.nativeEvent.contentOffset.y;
+      }}
+      scrollEventThrottle={16}
+    >
       <Text style={styles.source}>{conversion.sourceText}</Text>
       {conversion.status === "ready" ? (
         <View style={styles.listenRow}>
@@ -162,6 +189,10 @@ export function ResultScreen() {
           onLoop={loop}
           onTapToken={onTapToken}
           onLongPressToken={onLongPressToken}
+          onSentenceLayout={(id, y, height) => {
+            cardPos.current[id] = { y, h: height };
+            if (id === playingId) revealPlaying(id);
+          }}
         />
       ) : null}
       {picked ? (

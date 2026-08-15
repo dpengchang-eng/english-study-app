@@ -7,6 +7,7 @@ export function SentenceList({
   sentences,
   loading,
   selectedIds,
+  playingId,
   onPlay,
   onTapToken,
   onLongPressToken
@@ -14,6 +15,7 @@ export function SentenceList({
   sentences: Sentence[];
   loading?: boolean;
   selectedIds?: string[];
+  playingId?: string | null;
   onPlay?: (sentence: Sentence) => void;
   onTapToken?: (sentence: Sentence, token: Token) => void;
   onLongPressToken?: (sentence: Sentence, token: Token) => void;
@@ -37,7 +39,7 @@ export function SentenceList({
         const hasWords = tokens.some((token) => token.isWord);
         const tappable = { ...sentence, tokens };
         return (
-          <View key={sentence.id} style={styles.card}>
+          <View key={sentence.id} style={[styles.card, sentence.id === playingId && styles.cardOn]}>
             <View style={styles.row}>
               <View style={styles.words}>
                 {hasWords
@@ -62,8 +64,11 @@ export function SentenceList({
                   )}
               </View>
               {onPlay ? (
-                <Pressable style={styles.play} onPress={() => onPlay(sentence)}>
-                  <Text style={styles.playText}>听</Text>
+                <Pressable
+                  style={[styles.play, sentence.id === playingId && styles.playOn]}
+                  onPress={() => onPlay(sentence)}
+                >
+                  <Text style={[styles.playText, sentence.id === playingId && styles.playOnText]}>听</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -83,6 +88,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12
   },
+  cardOn: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft
+  },
   row: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   words: { flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
   word: { paddingHorizontal: 2, paddingVertical: 2, borderRadius: 6 },
@@ -96,7 +105,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6
   },
+  playOn: { backgroundColor: colors.accent },
   playText: { color: colors.ink, fontWeight: "700", fontSize: 13 },
+  playOnText: { color: "#fff" },
   bone: { height: 16, borderRadius: 8, backgroundColor: colors.line },
   boneWide: { width: "100%" },
   boneMid: { width: "82%" },

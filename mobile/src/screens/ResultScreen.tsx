@@ -7,11 +7,12 @@ import { EmptyHint } from "../components/EmptyHint";
 import { ErrorState } from "../components/ErrorState";
 import { SentenceList } from "../components/SentenceList";
 import { useAppState } from "../context/AppState";
+import { useArticleSpeech } from "../hooks/useArticleSpeech";
 import { auth } from "../firebase";
 import { openLookup } from "../navigation/rootNav";
 import type { ConvertStackParamList } from "../navigation/types";
 import { ensureTappableTokens } from "../services/align";
-import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
+import { SPEAK_FAIL_TEXT } from "../services/tts";
 import { colors, space } from "../theme";
 import { CONVERT_WAIT_MS, type Sentence, type Token } from "../types";
 
@@ -39,11 +40,12 @@ export function ResultScreen() {
   const [copied, setCopied] = useState(false);
   const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
   const [speakError, setSpeakError] = useState<string | null>(null);
+  const { mode, playingId, toggle, playOnce, stop } = useArticleSpeech(
+    sentences,
+    () => setSpeakError(SPEAK_FAIL_TEXT),
+    conversionId
+  );
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
-
-  useEffect(() => {
-    return () => stopSpeaking();
-  }, []);
 
   useEffect(() => {
     if (!conversion || conversion.status !== "loading") return;
@@ -75,7 +77,7 @@ export function ResultScreen() {
 
   const play = (sentence: Sentence): void => {
     setSpeakError(null);
-    speakAmerican(sentence.text, () => setSpeakError(SPEAK_FAIL_TEXT));
+    playOnce(sentence.id);
   };
 
   const openTokens = (sentence: Sentence, tokens: Token[]): void => {
@@ -120,9 +122,28 @@ export function ResultScreen() {
         <Text style={styles.speakError}>未同步到云</Text>
       ) : null}
       {conversion.status === "ready" ? (
+        <View style={styles.listenBar}>
+          <Pressable style={mode === "all" ? styles.btn : styles.ghost} onPress={() => toggle("all")}>
+            <Text style={mode === "all" ? styles.btnText : styles.ghostText}>听全文</Text>
+          </Pressable>
+          <Pressable style={mode === "loopOne" ? styles.btn : styles.ghost} onPress={() => toggle("loopOne")}>
+            <Text style={mode === "loopOne" ? styles.btnText : styles.ghostText}>单句循环</Text>
+          </Pressable>
+          <Pressable style={mode === "loopAll" ? styles.btn : styles.ghost} onPress={() => toggle("loopAll")}>
+            <Text style={mode === "loopAll" ? styles.btnText : styles.ghostText}>全文循环</Text>
+          </Pressable>
+          {mode !== "idle" ? (
+            <Pressable style={styles.ghost} onPress={stop}>
+              <Text style={styles.ghostText}>停止</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+      {conversion.status === "ready" ? (
         <SentenceList
           sentences={sentences}
           selectedIds={picked?.tokens.map((token) => token.id)}
+          playingId={playingId}
           onPlay={play}
           onTapToken={onTapToken}
           onLongPressToken={onLongPressToken}
@@ -155,6 +176,7 @@ const styles = StyleSheet.create({
   speakError: { color: colors.warn, fontSize: 14 },
   phrase: { backgroundColor: colors.accentSoft, borderRadius: 12, padding: 12 },
   phraseText: { color: colors.ink, fontWeight: "700" },
+  listenBar: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   actions: { flexDirection: "row", gap: 8 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
   btnText: { color: "#fff", fontWeight: "700" },

@@ -49,6 +49,11 @@ export function todayReviewCount(items: WordbookItem[], now: number): number {
   return itemsOnCalendarDay(items, seoulDayKey(new Date(now)), now).length;
 }
 
+/** 放回复习: dueAt = today 00:00 Seoul. Does not change box. */
+export function returnDueAtToTodaySeoul(item: WordbookItem, now: number): WordbookItem {
+  return { ...item, dueAt: seoulDayStartMs(now) };
+}
+
 export function diffSeoulDays(fromKey: string, toKey: string): number {
   const from = parseDayKey(fromKey);
   const to = parseDayKey(toKey);

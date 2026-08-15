@@ -8,6 +8,7 @@ import { useWordbook } from "../context/WordbookState";
 import { openCloze } from "../navigation/rootNav";
 import type { TabParamList } from "../navigation/types";
 import { dottedDayKeys, dueLabel, itemsOnCalendarDay, seoulDayKey, snapSelectedDayToToday, todayReviewCount } from "../services/reviewCalendar";
+import { takeReviewFocus } from "../services/reviewFocus";
 import { colors, space } from "../theme";
 import type { WordbookItem } from "../types";
 
@@ -16,10 +17,19 @@ export function ReviewScreen() {
   const { items } = useWordbook();
   const [now, setNow] = useState(() => Date.now());
   const [selectedDay, setSelectedDay] = useState(() => seoulDayKey(new Date()));
+  const [pinnedChecked, setPinnedChecked] = useState<string[] | null>(null);
+  const [calendarEpoch, setCalendarEpoch] = useState(0);
   useFocusEffect(
     useCallback(() => {
       const nextNow = Date.now();
       setNow(nextNow);
+      const focus = takeReviewFocus();
+      if (focus) {
+        setSelectedDay(focus.dayKey);
+        setPinnedChecked(focus.checkedIds);
+        setCalendarEpoch((value) => value + 1);
+        return;
+      }
       setSelectedDay((current) => snapSelectedDayToToday(current, nextNow));
     }, [])
   );
@@ -30,8 +40,17 @@ export function ReviewScreen() {
   const dayIds = dayItems.map((item) => item.id).join("\0");
 
   useEffect(() => {
+    if (pinnedChecked) {
+      setChecked(new Set(pinnedChecked));
+      return;
+    }
     setChecked(new Set(dayIds ? dayIds.split("\0") : []));
-  }, [dayIds, selectedDay]);
+  }, [dayIds, pinnedChecked, selectedDay]);
+
+  const selectDay = (dayKey: string): void => {
+    setPinnedChecked(null);
+    setSelectedDay(dayKey);
+  };
 
   const checkedItems = dayItems.filter((item) => checked.has(item.id));
 
@@ -51,7 +70,7 @@ export function ReviewScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <MonthCalendar selectedDay={selectedDay} dottedDays={dots} onPressDay={setSelectedDay} now={now} snapStaleMonth />
+      <MonthCalendar key={calendarEpoch} selectedDay={selectedDay} dottedDays={dots} onPressDay={selectDay} now={now} snapStaleMonth />
       {items.length === 0 ? (
         <>
           <EmptyHint text="先存词" />

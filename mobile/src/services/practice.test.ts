@@ -4,7 +4,8 @@ import type { Token, WordbookItem } from "../types";
 import { readFileSync } from "node:fs";
 import { blankParts, offsetsFromTokens, resolveBlankSpan } from "./blank";
 import { clozeAnswerLine } from "./practice";
-import { applyBox, nextGoodBox } from "./practiceSrs";
+import { applyBox, applyGoodPass, keepSrs, nextGoodBox } from "./practiceSrs";
+import { returnDueAtToTodaySeoul, seoulDayKey, seoulDayStartMs } from "./reviewCalendar";
 import { wordbookDraftFromSelection } from "./wordbookSelect";
 
 const sentence = "I went out for dinner with my family tonight.";
@@ -225,5 +226,99 @@ describe("SRS Again +60s / Good 1d 3d 7d", () => {
     const seven = applyBox({ ...item, box: 2 }, 3, now);
     assert.equal(seven.dueAt, now + 7 * 24 * 60 * 60 * 1000);
     assert.equal(seven.lastResult, "7");
+  });
+});
+
+describe("cloze after-answer SRS", () => {
+  const now = Date.parse("2026-08-15T10:00:00+09:00");
+  const item: WordbookItem = {
+    id: "dinner",
+    phrase: "dinner",
+    ipa: "",
+    senses: ["晚饭"],
+    simpleEn: "Dinner is the evening meal.",
+    sentenceContext: sentence,
+    conversionId: "c1",
+    blankStart: 15,
+    blankEnd: 21,
+    createdAt: now,
+    dueAt: now,
+    box: 0,
+    intervalDays: 0,
+    lastResult: null,
+    reviewCount: 0,
+    syncState: "synced"
+  };
+
+  it("submit does not change dueAt or box on correct or reveal", () => {
+    const correct = keepSrs(item);
+    assert.equal(correct.dueAt, item.dueAt);
+    assert.equal(correct.box, item.box);
+    const miss = keepSrs({ ...item, box: 2, dueAt: now - 3_000 });
+    assert.equal(miss.dueAt, now - 3_000);
+    assert.equal(miss.box, 2);
+    const src = readFileSync(new URL("./practice.ts", import.meta.url), "utf8");
+    const submit = src.slice(src.indexOf("export async function submitPractice"), src.indexOf("export async function passPractice"));
+    assert.match(submit, /dueAt: current\.dueAt/);
+    assert.match(submit, /box: current\.box/);
+    assert.doesNotMatch(submit, /applyBox/);
+    assert.doesNotMatch(submit, /applyGoodPass/);
+    assert.doesNotMatch(submit, /updateWordbookSrs/);
+    assert.doesNotMatch(submit, /nextGoodBox/);
+  });
+
+  it("过 advances with the existing Good SRS", () => {
+    const next = applyGoodPass(item, now);
+    assert.equal(next.box, 1);
+    assert.equal(next.dueAt, now + 1 * 24 * 60 * 60 * 1000);
+    assert.equal(next.lastResult, "1");
+    const later = applyGoodPass({ ...item, box: 1 }, now);
+    assert.equal(later.box, 2);
+    assert.equal(later.dueAt, now + 3 * 24 * 60 * 60 * 1000);
+    const src = readFileSync(new URL("./practice.ts", import.meta.url), "utf8");
+    const pass = src.slice(src.indexOf("export async function passPractice"), src.indexOf("export async function returnPracticedToToday"));
+    assert.match(pass, /applyGoodPass/);
+    assert.match(pass, /updateWordbookSrs/);
+  });
+
+  it("再练 and 下一题 after miss do not change dueAt or box", () => {
+    const due = now - 60_000;
+    const missed = { ...item, box: 2 as const, dueAt: due };
+    const kept = keepSrs(missed);
+    assert.equal(kept.dueAt, due);
+    assert.equal(kept.box, 2);
+    const cloze = readFileSync(new URL("../screens/ClozeScreen.tsx", import.meta.url), "utf8");
+    const retry = cloze.slice(cloze.indexOf("const retrySameCard"), cloze.indexOf("const finishCard"));
+    assert.match(retry, /resetCard/);
+    assert.doesNotMatch(retry, /passPractice/);
+    assert.doesNotMatch(retry, /updateWordbookSrs/);
+    assert.doesNotMatch(retry, /applyGoodPass/);
+    const afterCorrect = cloze.slice(cloze.indexOf("wasCorrect ? ("), cloze.indexOf(") : ("));
+    assert.match(afterCorrect, /过/);
+    assert.match(afterCorrect, /再练/);
+    assert.doesNotMatch(afterCorrect, /下一题/);
+    const afterMiss = cloze.slice(cloze.indexOf("<Text style={styles.btnText}>下一题</Text>"));
+    const nextHandler = cloze.slice(cloze.indexOf("onPress={finishCard}"), cloze.indexOf("<Text style={styles.btnText}>下一题</Text>"));
+    assert.match(afterMiss, /再练/);
+    assert.doesNotMatch(afterMiss, /过/);
+    assert.match(nextHandler, /finishCard/);
+    assert.doesNotMatch(nextHandler, /passPractice/);
+  });
+
+  it("放回复习 sets dueAt to today Seoul and keeps box", () => {
+    const future = { ...item, box: 2 as const, dueAt: now + 7 * 24 * 60 * 60 * 1000, lastResult: "3" as const };
+    const next = returnDueAtToTodaySeoul(future, now);
+    assert.equal(next.dueAt, seoulDayStartMs(now));
+    assert.equal(next.dueAt, Date.parse("2026-08-15T00:00:00+09:00"));
+    assert.equal(next.box, 2);
+    assert.equal(next.lastResult, "3");
+    assert.equal(next.intervalDays, future.intervalDays);
+    assert.equal(next.reviewCount, future.reviewCount);
+    assert.equal(seoulDayKey(new Date(next.dueAt)), "2026-08-15");
+    const src = readFileSync(new URL("./practice.ts", import.meta.url), "utf8");
+    const ret = src.slice(src.indexOf("export async function returnPracticedToToday"));
+    assert.match(ret, /returnDueAtToTodaySeoul/);
+    assert.doesNotMatch(ret, /applyBox/);
+    assert.doesNotMatch(ret, /applyGoodPass/);
   });
 });

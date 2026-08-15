@@ -1,16 +1,20 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
+import { rootNav } from "../navigation/rootNav";
 import {
+  decideListenAction,
   indexById,
   nextPlayIndex,
   resolveStartIndex,
   speakableItems,
-  type ArticlePlayMode
+  type ArticlePlayMode,
+  type ArticleSpeechMode,
+  type ListenRequest
 } from "../services/articleSpeech";
 import { continueSpeaking, speakAmerican, stopSpeaking, type SpeakHandlers } from "../services/tts";
 
-export type ArticleSpeechMode = ArticlePlayMode | "idle";
+export type { ArticleSpeechMode };
 
 export function useArticleSpeech(
   sentences: Array<{ id: string; text: string }>,
@@ -19,9 +23,10 @@ export function useArticleSpeech(
 ): {
   mode: ArticleSpeechMode;
   playingId: string | null;
-  toggle: (mode: Exclude<ArticlePlayMode, "once" | "loopOne">) => void;
-  playOnce: (id: string) => void;
-  loopOne: (id: string) => void;
+  canSpeak: boolean;
+  toggle: (mode: Exclude<ArticlePlayMode, "once" | "loopOne">) => boolean;
+  playOnce: (id: string) => boolean;
+  loopOne: (id: string) => boolean;
   stop: () => void;
 } {
   const items = speakableItems(sentences);
@@ -31,11 +36,15 @@ export function useArticleSpeech(
   onErrorRef.current = onError;
   const selectedIdRef = useRef<string | null>(null);
   const sessionRef = useRef(0);
+  const modeRef = useRef<ArticleSpeechMode>("idle");
+  const playingIdRef = useRef<string | null>(null);
   const [mode, setMode] = useState<ArticleSpeechMode>("idle");
   const [playingId, setPlayingId] = useState<string | null>(null);
 
   const stop = useCallback(() => {
     sessionRef.current += 1;
+    modeRef.current = "idle";
+    playingIdRef.current = null;
     setMode("idle");
     setPlayingId(null);
     stopSpeaking();
@@ -46,12 +55,16 @@ export function useArticleSpeech(
     const item = list[index];
     if (!item || session !== sessionRef.current) return;
     selectedIdRef.current = item.id;
+    playingIdRef.current = item.id;
+    modeRef.current = playMode;
     setPlayingId(item.id);
     setMode(playMode);
     const handlers: SpeakHandlers = {
       onError: () => {
         if (session !== sessionRef.current) return;
         sessionRef.current += 1;
+        modeRef.current = "idle";
+        playingIdRef.current = null;
         setMode("idle");
         setPlayingId(null);
         onErrorRef.current();
@@ -61,6 +74,8 @@ export function useArticleSpeech(
         const next = nextPlayIndex(playMode, index, list.length);
         if (next == null) {
           sessionRef.current += 1;
+          modeRef.current = "idle";
+          playingIdRef.current = null;
           setMode("idle");
           setPlayingId(null);
           return;
@@ -77,46 +92,39 @@ export function useArticleSpeech(
       const list = itemsRef.current;
       const selectedIndex = indexById(list, selectedId ?? selectedIdRef.current);
       const index = resolveStartIndex(playMode, list.length, selectedIndex);
-      if (index == null) return;
+      if (index == null) return false;
       sessionRef.current += 1;
-      stopSpeaking();
+      modeRef.current = playMode;
+      playingIdRef.current = list[index].id;
+      setMode(playMode);
+      setPlayingId(list[index].id);
+      // speakAmerican stops at most once. A second Speech.stop() here swallows sentence 1.
       speakAt(sessionRef.current, playMode, index, true);
+      return true;
     },
     [speakAt]
   );
 
+  const apply = useCallback(
+    (request: ListenRequest) => {
+      const decision = decideListenAction(modeRef.current, playingIdRef.current, request);
+      if (decision.action === "stop") {
+        stop();
+        return true;
+      }
+      return start(decision.mode, decision.id);
+    },
+    [start, stop]
+  );
+
   const toggle = useCallback(
-    (playMode: Exclude<ArticlePlayMode, "once" | "loopOne">) => {
-      if (mode === playMode) {
-        stop();
-        return;
-      }
-      start(playMode);
-    },
-    [mode, start, stop]
+    (playMode: Exclude<ArticlePlayMode, "once" | "loopOne">) => apply({ kind: playMode }),
+    [apply]
   );
 
-  const playOnce = useCallback(
-    (id: string) => {
-      if (mode === "once" && playingId === id) {
-        stop();
-        return;
-      }
-      start("once", id);
-    },
-    [mode, playingId, start, stop]
-  );
+  const playOnce = useCallback((id: string) => apply({ kind: "once", id }), [apply]);
 
-  const loopOne = useCallback(
-    (id: string) => {
-      if (mode === "loopOne" && playingId === id) {
-        stop();
-        return;
-      }
-      start("loopOne", id);
-    },
-    [mode, playingId, start, stop]
-  );
+  const loopOne = useCallback((id: string) => apply({ kind: "loopOne", id }), [apply]);
 
   const resetRef = useRef(resetKey);
   useEffect(() => {
@@ -139,5 +147,16 @@ export function useArticleSpeech(
     }, [stop])
   );
 
-  return { mode, playingId, toggle, playOnce, loopOne, stop };
+  useEffect(() => {
+    const stopIfOverlay = () => {
+      if (!rootNav.isReady()) return;
+      const name = rootNav.getCurrentRoute()?.name;
+      if (name === "Lookup" || name === "Cloze") stop();
+    };
+    const unsub = rootNav.addListener("state", stopIfOverlay);
+    stopIfOverlay();
+    return unsub;
+  }, [stop]);
+
+  return { mode, playingId, canSpeak: items.length > 0, toggle, playOnce, loopOne, stop };
 }

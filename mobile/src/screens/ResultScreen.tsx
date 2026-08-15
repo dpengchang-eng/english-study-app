@@ -17,6 +17,7 @@ import {
   nextSpeechSpeed,
   peekSpeechSpeed,
   saveSpeechSpeed,
+  shouldApplyLoadedSpeed,
   speechSpeedLabel,
   type SpeechSpeed
 } from "../services/speechSpeed";
@@ -51,27 +52,36 @@ export function ResultScreen() {
   const [speed, setSpeed] = useState<SpeechSpeed>(peekSpeechSpeed);
   const speedHold = useRef<SpeechSpeed>(speed);
   const speedDirty = useRef(false);
+  const playingRef = useRef(false);
   const { mode, playingId, toggle, playOnce, loopOne, restartCurrent, stop } = useArticleSpeech(
     sentences,
     () => setSpeakError(SPEAK_FAIL_TEXT),
     conversionId,
     speed
   );
+  playingRef.current = mode !== "idle";
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
 
   useEffect(() => {
     let live = true;
     void loadSpeechSpeed().then((saved) => {
-      if (!live || speedDirty.current) return;
+      if (!live || !shouldApplyLoadedSpeed(speedDirty.current, playingRef.current)) return;
       if (saved === speedHold.current) return;
       speedHold.current = saved;
       setSpeed(saved);
-      restartCurrent(saved);
     });
     return () => {
       live = false;
     };
-  }, [restartCurrent]);
+  }, []);
+
+  useEffect(() => {
+    if (!shouldApplyLoadedSpeed(speedDirty.current, mode !== "idle")) return;
+    const saved = peekSpeechSpeed();
+    if (saved === speedHold.current) return;
+    speedHold.current = saved;
+    setSpeed(saved);
+  }, [mode]);
 
   useEffect(() => {
     if (!conversion || conversion.status !== "loading") return;
@@ -125,7 +135,7 @@ export function ResultScreen() {
     speedDirty.current = true;
     const next = nextSpeechSpeed(speedHold.current);
     speedHold.current = next;
-    setSpeed(next);
+    setSpeed((prev) => nextSpeechSpeed(prev));
     void saveSpeechSpeed(next);
     restartCurrent(next);
   };

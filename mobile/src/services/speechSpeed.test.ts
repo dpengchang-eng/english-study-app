@@ -9,6 +9,7 @@ import {
   rememberSpeechSpeed,
   resetSpeechSpeedCache,
   saveSpeechSpeed,
+  shouldApplyLoadedSpeed,
   speechSpeedLabel,
   speedFromStorage,
   SPEECH_SPEEDS
@@ -80,6 +81,13 @@ describe("speech speed", () => {
     assert.equal(await loadSpeechSpeed(store), 1.5);
     assert.equal(peekSpeechSpeed(), 1.5);
     resetSpeechSpeedCache();
+  });
+
+  it("ignores a late load after a tap or while speech is playing", () => {
+    assert.equal(shouldApplyLoadedSpeed(true, false), false);
+    assert.equal(shouldApplyLoadedSpeed(false, true), false);
+    assert.equal(shouldApplyLoadedSpeed(true, true), false);
+    assert.equal(shouldApplyLoadedSpeed(false, false), true);
   });
 
   it("does not let a late disk read overwrite a tap that already saved", async () => {

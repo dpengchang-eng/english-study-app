@@ -4,11 +4,12 @@ import { db } from "../firebase";
 import type { PracticeCard, SubmitPracticeResult, WordbookItem } from "../types";
 import { resolveBlankSpan } from "./blank";
 import { acceptedAnswers, answerFromSources, isCorrectGuess, type StoredAnswer } from "./practiceGrade";
-import { applyBox, nextGoodBox } from "./practiceSrs";
-import { practiceSourceItems } from "./reviewCalendar";
+import { applyGoodPass } from "./practiceSrs";
+import { practiceSourceItems, returnDueAtToTodaySeoul } from "./reviewCalendar";
 import { updateWordbookSrs } from "./wordbook";
 
-export { applyBox, nextGoodBox } from "./practiceSrs";
+export { applyBox, applyGoodPass, keepSrs, nextGoodBox } from "./practiceSrs";
+export { returnDueAtToTodaySeoul } from "./reviewCalendar";
 
 export { blankedText, blankParts, FIXED_BLANK, resolveBlankSpan } from "./blank";
 
@@ -100,7 +101,7 @@ export async function submitPractice(
   items: WordbookItem[],
   wordbookItemId: string,
   input: string,
-  attempt: number,
+  _attempt: number,
   sessionId?: string
 ): Promise<{ result: SubmitPracticeResult; items: WordbookItem[] }> {
   const stored =
@@ -115,14 +116,37 @@ export async function submitPractice(
   if (!current) {
     return { result: { correct, expected, dueAt: Date.now(), box: 0 }, items };
   }
-  const shouldGrade = correct || attempt >= 2;
-  if (!shouldGrade) {
-    return { result: { correct, expected, dueAt: current.dueAt, box: current.box }, items };
+  return { result: { correct, expected, dueAt: current.dueAt, box: current.box }, items };
+}
+
+/** 过: write the existing Good SRS, then the UI goes to the next card. */
+export async function passPractice(
+  uid: string,
+  items: WordbookItem[],
+  wordbookItemId: string,
+  now = Date.now()
+): Promise<WordbookItem[]> {
+  const current = items.find((item) => item.id === wordbookItemId);
+  if (!current) return items;
+  return updateWordbookSrs(uid, items, applyGoodPass(current, now));
+}
+
+/** 放回复习: set practiced items' dueAt to today 00:00 Seoul. Keep box. */
+export async function returnPracticedToToday(
+  uid: string,
+  items: WordbookItem[],
+  itemIds: readonly string[],
+  now = Date.now()
+): Promise<WordbookItem[]> {
+  let next = items;
+  for (const id of itemIds) {
+    const current = next.find((item) => item.id === id);
+    if (!current) continue;
+    const returned = returnDueAtToTodaySeoul(current, now);
+    if (returned.dueAt === current.dueAt) continue;
+    next = await updateWordbookSrs(uid, next, returned);
   }
-  const next = applyBox(current, correct ? nextGoodBox(current.box) : 0, Date.now());
-  const nextItems = await updateWordbookSrs(uid, items, next);
-  memory.set(wordbookItemId, { expected, accepted, item: next });
-  return { result: { correct, expected, dueAt: next.dueAt, box: next.box }, items: nextItems };
+  return next;
 }
 
 export function clearPracticeAnswers(): void {

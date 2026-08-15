@@ -32,6 +32,7 @@ describe("cloze back, reveal, and listen", () => {
     assert.match(cloze, /session\.cards\.length === 0/);
     assert.match(cloze, /settled/);
     assert.match(cloze, /再练错题/);
+    assert.match(cloze, /放回复习/);
     assert.match(cloze, /navigate\("Tabs", \{ screen: "ReviewTab" \}\)/);
   });
 
@@ -65,6 +66,19 @@ describe("cloze back, reveal, and listen", () => {
     assert.doesNotMatch(firstWrong, /senses/);
     assert.doesNotMatch(firstWrong, /simpleEn/);
     assert.doesNotMatch(firstWrong, /phrase/);
+  });
+
+  it("shows 过 / 再练 after correct and 下一题 / 再练 after reveal", () => {
+    assert.match(cloze, /wasCorrect \? \(/);
+    assert.match(cloze, />过</);
+    assert.match(cloze, />再练</);
+    assert.match(cloze, />下一题</);
+    assert.match(cloze, /passAndNext/);
+    assert.match(cloze, /retrySameCard/);
+    const afterCorrect = cloze.slice(cloze.indexOf("wasCorrect ? ("), cloze.indexOf(") : ("));
+    assert.match(afterCorrect, /过/);
+    assert.match(afterCorrect, /再练/);
+    assert.doesNotMatch(afterCorrect, /下一题/);
   });
 });
 

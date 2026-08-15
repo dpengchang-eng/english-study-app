@@ -6,8 +6,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../context/AppState";
 import { useWordbook } from "../context/WordbookState";
 import type { RootStackParamList } from "../navigation/types";
-import { blankParts, clearPracticeAnswers, clozeAnswerLine, createPractice, type PracticeSession, submitPractice } from "../services/practice";
-import { clozeHydrateKey, pickClozeItems, practiceSourceItems, waitForClozeHydrate } from "../services/reviewCalendar";
+import { blankParts, clearPracticeAnswers, clozeAnswerLine, createPractice, type PracticeSession, passPractice, returnPracticedToToday, submitPractice } from "../services/practice";
+import { clozeHydrateKey, pickClozeItems, practiceSourceItems, seoulDayKey, waitForClozeHydrate } from "../services/reviewCalendar";
+import { queueReviewFocus } from "../services/reviewFocus";
 import { loadSpeechSpeed } from "../services/speechSpeed";
 import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
@@ -41,7 +42,9 @@ export function ClozeScreen() {
   const [syncWarn, setSyncWarn] = useState("");
   const [busy, setBusy] = useState(false);
   const [settled, setSettled] = useState(false);
+  const [wasCorrect, setWasCorrect] = useState(false);
   const [missedIds, setMissedIds] = useState<string[]>([]);
+  const [practicedIds, setPracticedIds] = useState<string[]>([]);
   const [listening, setListening] = useState(false);
   const [speakError, setSpeakError] = useState<string | null>(null);
   const itemsRef = useRef(items);
@@ -87,7 +90,9 @@ export function ClozeScreen() {
     setMessage("");
     setSyncWarn("");
     setSettled(false);
+    setWasCorrect(false);
     setMissedIds([]);
+    setPracticedIds([]);
     stopListen();
     const hang = setTimeout(() => {
       if (live) setSession((current) => current ?? { sessionId: "local", cards: [] });
@@ -117,14 +122,23 @@ export function ClozeScreen() {
     };
   }, [hydrateKey, itemIds, itemIdsKey, stopListen, uid]);
 
+  const markPracticed = (id: string): void => {
+    setPracticedIds((current) => (current.includes(id) ? current : [...current, id]));
+  };
+
   const resetCard = (): void => {
     setDraft("");
     setAttempt(0);
     setRevealed(false);
+    setWasCorrect(false);
     setMessage("");
     setSyncWarn("");
     setSpeakError(null);
     stopListen();
+  };
+
+  const retrySameCard = (): void => {
+    resetCard();
   };
 
   const finishCard = (): void => {
@@ -176,7 +190,9 @@ export function ClozeScreen() {
       setMessage("");
       setSyncWarn("");
       setSettled(false);
+      setWasCorrect(false);
       setMissedIds([]);
+      setPracticedIds([]);
       setSpeakError(null);
     } catch {
       setSession({ sessionId: "local", cards: [] });
@@ -202,6 +218,8 @@ export function ClozeScreen() {
     setSyncWarn(updated?.syncState === "error" ? "未同步到云" : "");
     setAttempt(nextAttempt);
     if (result.correct) {
+      markPracticed(card.wordbookItemId);
+      setWasCorrect(true);
       setRevealed(true);
       setBusy(false);
       return;
@@ -211,10 +229,35 @@ export function ClozeScreen() {
       setBusy(false);
       return;
     }
+    markPracticed(card.wordbookItemId);
     setMissedIds((current) => (current.includes(card.wordbookItemId) ? current : [...current, card.wordbookItemId]));
+    setWasCorrect(false);
     setRevealed(true);
     setMessage(result.expected ? "" : "这题先跳过");
     setBusy(false);
+  };
+
+  const passAndNext = async (card: PracticeCard): Promise<void> => {
+    if (!wasCorrect || busy) return;
+    setBusy(true);
+    const nextItems = await passPractice(uid, itemsRef.current, card.wordbookItemId);
+    syncItems(nextItems);
+    const updated = nextItems.find((item) => item.id === card.wordbookItemId);
+    setSyncWarn(updated?.syncState === "error" ? "未同步到云" : "");
+    setBusy(false);
+    finishCard();
+  };
+
+  const returnRoundToReview = async (): Promise<void> => {
+    if (!practicedIds.length || busy) return;
+    setBusy(true);
+    const now = Date.now();
+    const nextItems = await returnPracticedToToday(uid, itemsRef.current, practicedIds, now);
+    syncItems(nextItems);
+    queueReviewFocus({ dayKey: seoulDayKey(new Date(now)), checkedIds: practicedIds });
+    setBusy(false);
+    stopListen();
+    navigation.navigate("Tabs", { screen: "ReviewTab" });
   };
 
   if (session === null) {
@@ -253,6 +296,11 @@ export function ClozeScreen() {
         <Pressable style={styles.btn} onPress={backToReview}>
           <Text style={styles.btnText}>返回复习</Text>
         </Pressable>
+        {practicedIds.length > 0 ? (
+          <Pressable style={styles.ghost} onPress={() => void returnRoundToReview()} disabled={busy}>
+            <Text style={styles.ghostText}>放回复习</Text>
+          </Pressable>
+        ) : null}
         {missedIds.length > 0 ? (
           <Pressable style={styles.ghost} onPress={() => void retryMissed()} disabled={busy}>
             <Text style={styles.ghostText}>再练错题</Text>
@@ -309,9 +357,25 @@ export function ClozeScreen() {
       {syncWarn ? <Text style={styles.sync}>{syncWarn}</Text> : null}
       {speakError ? <Text style={styles.sync}>{speakError}</Text> : null}
       {revealed ? (
-        <Pressable style={styles.btn} onPress={finishCard}>
-          <Text style={styles.btnText}>下一题</Text>
-        </Pressable>
+        wasCorrect ? (
+          <>
+            <Pressable style={[styles.btn, busy && styles.off]} onPress={() => void passAndNext(card)} disabled={busy}>
+              <Text style={styles.btnText}>过</Text>
+            </Pressable>
+            <Pressable style={styles.ghost} onPress={retrySameCard} disabled={busy}>
+              <Text style={styles.ghostText}>再练</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable style={styles.btn} onPress={finishCard}>
+              <Text style={styles.btnText}>下一题</Text>
+            </Pressable>
+            <Pressable style={styles.ghost} onPress={retrySameCard}>
+              <Text style={styles.ghostText}>再练</Text>
+            </Pressable>
+          </>
+        )
       ) : (
         <Pressable style={[styles.btn, busy && styles.off]} onPress={() => void submit(card)} disabled={busy}>
           <Text style={styles.btnText}>提交</Text>

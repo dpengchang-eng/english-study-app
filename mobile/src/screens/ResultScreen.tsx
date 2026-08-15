@@ -134,7 +134,7 @@ export function ResultScreen() {
           <Text style={styles.listenPipe}>|</Text>
           <Pressable onPress={onRepeat} hitSlop={8}>
             <Text style={mode === "loopAll" ? styles.listenOn : styles.listenText}>
-              {mode === "loopAll" ? "停止" : "复读"}
+              {mode === "loopAll" ? "停止" : "复读全文"}
             </Text>
           </Pressable>
         </View>

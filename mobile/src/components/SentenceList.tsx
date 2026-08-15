@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ensureTappableTokens } from "../services/align";
+import type { ArticlePlayMode } from "../services/articleSpeech";
 import type { Sentence, Token } from "../types";
 import { colors, space } from "../theme";
 
@@ -7,14 +8,20 @@ export function SentenceList({
   sentences,
   loading,
   selectedIds,
+  playingId,
+  listenMode,
   onPlay,
+  onLoop,
   onTapToken,
   onLongPressToken
 }: {
   sentences: Sentence[];
   loading?: boolean;
   selectedIds?: string[];
+  playingId?: string | null;
+  listenMode?: ArticlePlayMode | "idle";
   onPlay?: (sentence: Sentence) => void;
+  onLoop?: (sentence: Sentence) => void;
   onTapToken?: (sentence: Sentence, token: Token) => void;
   onLongPressToken?: (sentence: Sentence, token: Token) => void;
 }) {
@@ -37,7 +44,7 @@ export function SentenceList({
         const hasWords = tokens.some((token) => token.isWord);
         const tappable = { ...sentence, tokens };
         return (
-          <View key={sentence.id} style={styles.card}>
+          <View key={sentence.id} style={[styles.card, sentence.id === playingId && styles.cardOn]}>
             <View style={styles.row}>
               <View style={styles.words}>
                 {hasWords
@@ -61,10 +68,39 @@ export function SentenceList({
                     <Text style={styles.plain}>{sentence.text}</Text>
                   )}
               </View>
-              {onPlay ? (
-                <Pressable style={styles.play} onPress={() => onPlay(sentence)}>
-                  <Text style={styles.playText}>听</Text>
-                </Pressable>
+              {onPlay || onLoop ? (
+                <View style={styles.plays}>
+                  {onPlay ? (
+                    <Pressable
+                      style={[styles.play, listenMode === "once" && sentence.id === playingId && styles.playOn]}
+                      onPress={() => onPlay(sentence)}
+                    >
+                      <Text
+                        style={[
+                          styles.playText,
+                          listenMode === "once" && sentence.id === playingId && styles.playOnText
+                        ]}
+                      >
+                        {listenMode === "once" && sentence.id === playingId ? "停止" : "单听"}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {onLoop ? (
+                    <Pressable
+                      style={[styles.play, listenMode === "loopOne" && sentence.id === playingId && styles.playOn]}
+                      onPress={() => onLoop(sentence)}
+                    >
+                      <Text
+                        style={[
+                          styles.playText,
+                          listenMode === "loopOne" && sentence.id === playingId && styles.playOnText
+                        ]}
+                      >
+                        {listenMode === "loopOne" && sentence.id === playingId ? "停止" : "循环"}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               ) : null}
             </View>
           </View>
@@ -83,6 +119,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12
   },
+  cardOn: {
+    backgroundColor: colors.accentSoft
+  },
   row: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   words: { flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
   word: { paddingHorizontal: 2, paddingVertical: 2, borderRadius: 6 },
@@ -90,13 +129,16 @@ const styles = StyleSheet.create({
   wordText: { color: colors.ink, fontSize: 18, lineHeight: 28 },
   punct: { color: colors.ink, fontSize: 18, lineHeight: 28 },
   plain: { color: colors.ink, fontSize: 18, lineHeight: 28 },
+  plays: { gap: 6, alignItems: "flex-end" },
   play: {
     backgroundColor: colors.accentSoft,
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6
   },
+  playOn: { backgroundColor: colors.accent },
   playText: { color: colors.ink, fontWeight: "700", fontSize: 13 },
+  playOnText: { color: "#fff" },
   bone: { height: 16, borderRadius: 8, backgroundColor: colors.line },
   boneWide: { width: "100%" },
   boneMid: { width: "82%" },

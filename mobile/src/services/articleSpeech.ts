@@ -13,11 +13,11 @@ export function indexById(items: Array<{ id: string }>, id: string | null | unde
 /** Change speed: stay on this sentence and this mode, or do nothing if idle. */
 export function currentPlay(
   mode: ArticlePlayMode | "idle",
-  playingId: string | null,
+  selectedId: string | null,
   items: Array<{ id: string }>
 ): { mode: ArticlePlayMode; index: number } | null {
-  if (mode === "idle" || !playingId) return null;
-  const index = indexById(items, playingId);
+  if (mode === "idle" || !selectedId) return null;
+  const index = indexById(items, selectedId);
   if (index == null) return null;
   return { mode, index };
 }

@@ -9,7 +9,7 @@ import {
   speakableItems,
   type ArticlePlayMode
 } from "../services/articleSpeech";
-import { type SpeechSpeed } from "../services/speechSpeed";
+import { peekSpeechSpeed, type SpeechSpeed } from "../services/speechSpeed";
 import { continueSpeaking, speakAmerican, stopSpeaking, type SpeakHandlers } from "../services/tts";
 
 export type ArticleSpeechMode = ArticlePlayMode | "idle";
@@ -18,7 +18,7 @@ export function useArticleSpeech(
   sentences: Array<{ id: string; text: string }>,
   onError: () => void,
   resetKey?: string,
-  speed: SpeechSpeed = 1
+  speed: SpeechSpeed = peekSpeechSpeed()
 ): {
   mode: ArticleSpeechMode;
   playingId: string | null;
@@ -38,13 +38,11 @@ export function useArticleSpeech(
   const speedRef = useRef(speed);
   speedRef.current = speed;
   const modeRef = useRef<ArticleSpeechMode>("idle");
-  const playingIdRef = useRef<string | null>(null);
   const [mode, setMode] = useState<ArticleSpeechMode>("idle");
   const [playingId, setPlayingId] = useState<string | null>(null);
 
   const markIdle = useCallback(() => {
     modeRef.current = "idle";
-    playingIdRef.current = null;
     setMode("idle");
     setPlayingId(null);
   }, []);
@@ -61,7 +59,6 @@ export function useArticleSpeech(
     if (!item || session !== sessionRef.current) return;
     selectedIdRef.current = item.id;
     modeRef.current = playMode;
-    playingIdRef.current = item.id;
     setPlayingId(item.id);
     setMode(playMode);
     const handlers: SpeakHandlers = {
@@ -124,7 +121,7 @@ export function useArticleSpeech(
   const restartCurrent = useCallback(
     (nextSpeed?: SpeechSpeed) => {
       if (nextSpeed != null) speedRef.current = nextSpeed;
-      const play = currentPlay(modeRef.current, playingIdRef.current, itemsRef.current);
+      const play = currentPlay(modeRef.current, selectedIdRef.current, itemsRef.current);
       if (!play) return;
       sessionRef.current += 1;
       stopSpeaking();

@@ -31,6 +31,11 @@ export function speechSpeedLabel(speed: SpeechSpeed): string {
   return `语速 ${parseSpeechSpeed(speed)}x`;
 }
 
+/** Late load may update the label only when idle and the user has not tapped 语速. */
+export function shouldApplyLoadedSpeed(dirty: boolean, playing: boolean): boolean {
+  return !dirty && !playing;
+}
+
 export function peekSpeechSpeed(): SpeechSpeed {
   return cached ?? 1;
 }

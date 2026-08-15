@@ -88,6 +88,13 @@ describe("currentPlay", () => {
     const playLoop = currentPlay("loopAll", "s2", items);
     assert.equal(playLoop && nextPlayIndex(playLoop.mode, playLoop.index, items.length), 0);
   });
+
+  it("uses selectedIdRef, so a just-started next sentence is not restarted as the previous one", () => {
+    const stalePlayingId = "s0";
+    const selectedId = "s1";
+    assert.deepEqual(currentPlay("all", selectedId, items), { mode: "all", index: 1 });
+    assert.notDeepEqual(currentPlay("all", selectedId, items), currentPlay("all", stalePlayingId, items));
+  });
 });
 
 function heard(mode: "once" | "all" | "loopOne" | "loopAll", length: number, selected: number | null, steps: number): number[] {

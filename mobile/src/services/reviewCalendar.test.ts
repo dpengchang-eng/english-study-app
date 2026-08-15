@@ -148,6 +148,34 @@ describe("createPractice list", () => {
       ["sooner", "later"]
     );
   });
+
+  it("keeps 1-word, short-word, and phrase items and does not filter by length", () => {
+    const now = Date.parse("2026-08-15T10:00:00+09:00");
+    const one = { ...item("a", now), phrase: "a", sentenceContext: "I ate a pear." };
+    const short = { ...item("to", now + 1), phrase: "to", sentenceContext: "I like to cook." };
+    const phrase = { ...item("grab coffee", now + 2), phrase: "grab coffee", sentenceContext: "Let's grab coffee." };
+    const source = practiceSourceItems([phrase, one, short]);
+    assert.deepEqual(
+      source.map((row) => row.id),
+      ["a", "to", "grab coffee"]
+    );
+    const picked = pickClozeItems([one, short, phrase], ["a", "to", "grab coffee"]);
+    assert.deepEqual(
+      picked.map((row) => row.id),
+      ["a", "to", "grab coffee"]
+    );
+    const day = itemsOnCalendarDay([one, short, phrase], "2026-08-15", now);
+    assert.deepEqual(
+      day.map((row) => row.id),
+      ["a", "to", "grab coffee"]
+    );
+    const practice = readFileSync(new URL("./practice.ts", import.meta.url), "utf8");
+    const calendar = readFileSync(new URL("./reviewCalendar.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(practice, /queryDueWordbook/);
+    assert.doesNotMatch(practice, /phrase\.split\(/);
+    assert.doesNotMatch(calendar, /phrase\.length\s*[<>=]/);
+    assert.doesNotMatch(calendar, /split\(\/\\s\+\/\)\.length/);
+  });
 });
 
 describe("midnight selected-day snap", () => {

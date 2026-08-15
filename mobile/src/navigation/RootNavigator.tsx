@@ -86,7 +86,7 @@ export function RootNavigator() {
         <RootStack.Screen
           name="Cloze"
           component={ClozeScreen}
-          options={{ presentation: "fullScreenModal", headerShown: true, title: "填空" }}
+          options={{ presentation: "fullScreenModal", headerShown: false }}
         />
       </RootStack.Navigator>
     </NavigationContainer>

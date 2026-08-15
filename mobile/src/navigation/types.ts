@@ -1,3 +1,4 @@
+import type { NavigatorScreenParams } from "@react-navigation/native";
 import type { Token } from "../types";
 
 export type ConvertStackParamList = {
@@ -13,7 +14,7 @@ export type TabParamList = {
 };
 
 export type RootStackParamList = {
-  Tabs: undefined;
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
   Lookup: {
     tokens: Token[];
     sentenceTokens?: Token[];

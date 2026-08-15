@@ -61,9 +61,11 @@ export function LookupScreen() {
   const words = wordTokens(tokens);
   const selected = tokensForSpan(tokens, span);
   const wholeOn = isWholeSentence(span, words.length);
-  const sentenceContext = sentence?.text ?? route.params.sentenceText;
+  const sentenceText = sentence?.text ?? route.params.sentenceText;
+  const sentenceContext = sentenceText;
   const built = phraseFromTokens(selected, sentenceContext);
   const phrase = built.phrase;
+  const surface = wholeOn ? sentenceText : phrase;
   const lemma = built.lemmaKey;
   const lemmaKey = built.lemmaKey;
   const alreadySaved = items.some((item) => item.id === lemmaKey);
@@ -96,7 +98,7 @@ export function LookupScreen() {
     setIpa("");
     setSenses([]);
     setSimpleEn("");
-    void lookupWord({ lemma, surface: phrase, sentenceContext })
+    void lookupWord({ lemma, surface, sentenceContext })
       .then((result) => {
         if (!live) return;
         setIpa(result.ipa);
@@ -114,7 +116,7 @@ export function LookupScreen() {
     return () => {
       live = false;
     };
-  }, [lemma, phrase, sentenceContext]);
+  }, [lemma, surface, sentenceContext]);
 
   const tapWord = (token: Token): void => {
     const index = words.findIndex((word) => word.id === token.id);
@@ -141,7 +143,7 @@ export function LookupScreen() {
     }
     setSpeakError(null);
     setListening(true);
-    speakAmerican(phrase, {
+    speakAmerican(surface, {
       onError: () => {
         setListening(false);
         setSpeakError(SPEAK_FAIL_TEXT);
@@ -152,6 +154,7 @@ export function LookupScreen() {
   };
 
   const save = async (): Promise<void> => {
+    if (loading) return;
     try {
       const result = await savePhrase({
         tokens: selected,
@@ -213,12 +216,16 @@ export function LookupScreen() {
             </Text>
           ))
         : null}
-      {!loading && simpleEn ? <Text style={styles.simpleEn}>{simpleEn}</Text> : null}
+      {!loading && simpleEn ? (
+        <Text style={styles.simpleEn} numberOfLines={1}>
+          {simpleEn}
+        </Text>
+      ) : null}
       <View style={styles.row}>
         <Pressable style={styles.ghost} onPress={toggleListen}>
           <Text style={styles.ghostText}>听选区</Text>
         </Pressable>
-        <Pressable style={styles.btn} onPress={() => void save()}>
+        <Pressable style={[styles.btn, loading && styles.off]} onPress={() => void save()} disabled={loading}>
           <Text style={styles.btnText}>加入词本</Text>
         </Pressable>
       </View>
@@ -248,6 +255,7 @@ const styles = StyleSheet.create({
   simpleEn: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   row: { flexDirection: "row", gap: 8, marginTop: 8 },
   btn: { backgroundColor: colors.accent, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  off: { opacity: 0.45 },
   btnText: { color: "#fff", fontWeight: "700" },
   ghost: { backgroundColor: colors.accentSoft, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
   ghostText: { color: colors.ink, fontWeight: "700" },

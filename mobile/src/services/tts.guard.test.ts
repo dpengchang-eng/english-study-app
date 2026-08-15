@@ -52,7 +52,7 @@ describe("listen tts", () => {
     assert.doesNotMatch(homeListen, /toggle\("all"\)/);
     assert.doesNotMatch(homeListen, /loadSpeechSpeed\(\)\.then\(setSpeed\)/);
     const lookup = readFileSync(new URL("../screens/LookupScreen.tsx", import.meta.url), "utf8");
-    assert.match(lookup, /speakAmerican\(phrase,/);
+    assert.match(lookup, /speakAmerican\(surface,/);
     assert.doesNotMatch(lookup, /loadSpeechSpeed|speechSpeedLabel|restartCurrent/);
     const me = readFileSync(new URL("../screens/MeScreen.tsx", import.meta.url), "utf8");
     assert.doesNotMatch(me, /语速/);

@@ -97,7 +97,22 @@ function markWordishIfNone(tokens: StoredToken[], sentence: string, sentenceId: 
   return sentence.trim() ? regexRetokenize(sentence, sentenceId) : marked;
 }
 
-/** History and Gemini rows: missing tokens or no isWord → same regex as sample.ts. */
+function hasCharOffsets(tokens: Array<{ charStart?: number; charEnd?: number }>): boolean {
+  return tokens.every((token) => {
+    const start = token.charStart;
+    const end = token.charEnd;
+    return (
+      typeof start === "number" &&
+      typeof end === "number" &&
+      Number.isFinite(start) &&
+      Number.isFinite(end) &&
+      start >= 0 &&
+      end > start
+    );
+  });
+}
+
+/** History and Gemini rows: missing tokens, no isWord, or missing offsets → regex / align. */
 export function ensureTappableTokens(sentence: Pick<Sentence, "id" | "text" | "tokens">): Token[] {
   const text = sentence.text ?? "";
   const id = sentence.id || "s0";
@@ -109,6 +124,18 @@ export function ensureTappableTokens(sentence: Pick<Sentence, "id" | "text" | "t
     : raw.map((token) => ({ ...token, isWord: isWordish(token.surface) }));
 
   if (!tokens.some((token) => token.isWord)) return regexRetokenize(text, id);
+  if (!hasCharOffsets(tokens)) {
+    return alignTokens(
+      text,
+      tokens.map((token) => ({
+        surface: token.surface,
+        lemma: token.lemma,
+        pos: "",
+        isWord: token.isWord
+      })),
+      id
+    );
+  }
   return tokens;
 }
 

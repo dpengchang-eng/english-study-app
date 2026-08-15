@@ -1,7 +1,15 @@
 import { geminiLookup } from "./geminiLookup";
-import { emptyLookup, type LookupInput, type LookupResult } from "./lookupParse";
+import {
+  emptyLookup,
+  lookupCacheKey,
+  oneLineSimpleEn,
+  shouldRememberLookup,
+  type LookupInput,
+  type LookupResult
+} from "./lookupParse";
 
 export type { LookupInput, LookupResult } from "./lookupParse";
+export { lookupCacheKey, shouldRememberLookup };
 
 const LOCAL: Record<string, LookupResult> = {
   coffee: { ipa: "/ˈkɔfi/", senses: ["咖啡", "咖啡豆", "咖啡色"], simpleEn: "Coffee is a hot drink." },
@@ -22,8 +30,12 @@ function clipLookup(result: LookupResult): LookupResult {
   return {
     ipa: result.ipa,
     senses: result.senses.slice(0, 3),
-    simpleEn: result.simpleEn.trim()
+    simpleEn: oneLineSimpleEn(result.simpleEn)
   };
+}
+
+function rememberLookup(key: string, result: LookupResult): void {
+  if (shouldRememberLookup(result)) memory.set(key, result);
 }
 
 function fromLocal(lemma: string): LookupResult | undefined {
@@ -34,13 +46,13 @@ export async function lookupWord(input: LookupInput): Promise<LookupResult> {
   try {
     const lemma = input.lemma.trim();
     const surface = input.surface.trim();
-    const key = (lemma || surface).toLowerCase();
+    const key = lookupCacheKey({ lemma, surface, sentenceContext: input.sentenceContext });
     const cached = memory.get(key);
     if (cached) return cached;
-    const local = fromLocal(key) ?? fromLocal(surface);
+    const local = fromLocal(surface) ?? fromLocal(lemma);
     if (local) {
       const clipped = clipLookup(local);
-      memory.set(key, clipped);
+      rememberLookup(key, clipped);
       return clipped;
     }
     const remote = await geminiLookup({
@@ -49,8 +61,20 @@ export async function lookupWord(input: LookupInput): Promise<LookupResult> {
       sentenceContext: input.sentenceContext
     });
     const clipped = clipLookup(remote);
-    memory.set(key, clipped);
+    rememberLookup(key, clipped);
     return clipped;
+  } catch {
+    return emptyLookup();
+  }
+}
+
+/** Wait for the in-flight lookup so save does not lock an empty row. Failure still returns empty fields. */
+export async function lookupForSave(
+  input: LookupInput,
+  pending?: Promise<LookupResult> | null
+): Promise<LookupResult> {
+  try {
+    return clipLookup(await (pending ?? lookupWord(input)));
   } catch {
     return emptyLookup();
   }

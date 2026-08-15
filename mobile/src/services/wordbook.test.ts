@@ -6,6 +6,7 @@ import { PHRASE_MAX, SENTENCE_CONTEXT_MAX } from "../types";
 import {
   consecutiveTokenSpan,
   EMPTY_SELECTION,
+  fillEmptyWordbookGloss,
   selectWordTokens,
   wordbookDraftFromSelection
 } from "./wordbookSelect";
@@ -55,6 +56,19 @@ describe("saveToWordbook selection", () => {
     assert.equal(sentence.slice(draft.blankStart, draft.blankEnd), draft.phrase);
     assert.equal(draft.simpleEn, "This is about meeting for coffee.");
     assert.ok(draft.lemmaKey);
+  });
+
+  it("pins saved simpleEn to one line", () => {
+    const draft = wordbookDraftFromSelection({
+      tokens: words(tokens).slice(3, 5),
+      sentenceTokens: tokens,
+      sentenceText: sentence,
+      conversionId: "c1",
+      ipa: "",
+      senses: ["随手拿"],
+      simpleEn: "Grab coffee quickly.\nA second line."
+    });
+    assert.equal(draft.simpleEn, "Grab coffee quickly. A second line.");
   });
 
   it("saves a whole-sentence span, including punctuation, as one cloze blank", () => {
@@ -125,6 +139,14 @@ describe("saveToWordbook selection", () => {
     assert.equal(existing.id, draft.lemmaKey);
     assert.equal(existing.dueAt, 9_999);
     assert.equal(existing.box, 2);
+    const filled = fillEmptyWordbookGloss(
+      { ipa: "", senses: [], simpleEn: "" },
+      { ipa: draft.ipa, senses: draft.senses, simpleEn: "Grab means take quickly." }
+    );
+    assert.deepEqual(filled, { ipa: "/ɡræb/", senses: ["随手拿"], simpleEn: "Grab means take quickly." });
+    assert.equal(existing.dueAt, 9_999);
+    assert.equal(existing.box, 2);
+    assert.equal(existing.reviewCount, 4);
   });
 });
 

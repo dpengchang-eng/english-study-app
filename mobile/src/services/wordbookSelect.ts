@@ -1,5 +1,6 @@
-import { PHRASE_MAX, SENTENCE_CONTEXT_MAX, type Token } from "../types";
+import { PHRASE_MAX, SENTENCE_CONTEXT_MAX, type Token, type WordbookItem } from "../types";
 import { offsetsFromTokens, resolveBlankSpan } from "./blank";
+import { oneLineSimpleEn } from "./lookupParse";
 import { slugLemma } from "./slug";
 
 export const EMPTY_SELECTION = "没有可保存的词";
@@ -111,6 +112,20 @@ export function wordbookDraftFromSelection(input: {
     conversionId: (input.conversionId || "local").slice(0, 80),
     ipa: input.ipa.slice(0, 80),
     senses: input.senses.filter((item) => item.trim()).slice(0, 3),
-    simpleEn: (input.simpleEn ?? "").trim().slice(0, SENTENCE_CONTEXT_MAX)
+    simpleEn: oneLineSimpleEn(input.simpleEn ?? "").slice(0, SENTENCE_CONTEXT_MAX)
   };
+}
+
+/** Fill empty gloss on an existing row. Do not touch SRS. */
+export function fillEmptyWordbookGloss(
+  existing: Pick<WordbookItem, "ipa" | "senses" | "simpleEn">,
+  draft: { ipa: string; senses: string[]; simpleEn: string }
+): { ipa: string; senses: string[]; simpleEn: string } | null {
+  const ipa = existing.ipa.trim() ? existing.ipa : draft.ipa.slice(0, 80);
+  const senses = existing.senses.length ? existing.senses : draft.senses.filter((item) => item.trim()).slice(0, 3);
+  const simpleEn = existing.simpleEn.trim() ? existing.simpleEn : oneLineSimpleEn(draft.simpleEn).slice(0, SENTENCE_CONTEXT_MAX);
+  const sameSenses =
+    senses.length === existing.senses.length && senses.every((item, index) => item === existing.senses[index]);
+  if (ipa === existing.ipa && simpleEn === existing.simpleEn && sameSenses) return null;
+  return { ipa, senses, simpleEn };
 }

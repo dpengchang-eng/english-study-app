@@ -121,7 +121,9 @@ export function snapSelectedDayToToday(selectedDay: string, now: number): string
  */
 export function snapDisplayedMonth(year: number, month: number, now: number): { year: number; month: number } {
   const current = yearMonthOf(now);
-  if (year < current.year || (year === current.year && month < current.month)) return current;
+  if (year < current.year || (year === current.year && month < current.month)) {
+    return { year: current.year, month: current.month };
+  }
   return { year, month };
 }
 

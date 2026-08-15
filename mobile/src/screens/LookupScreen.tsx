@@ -144,18 +144,14 @@ export function LookupScreen() {
     }
     setSpeakError(null);
     setListening(true);
-    speakAmerican(
-      phrase,
-      {
-        onError: () => {
-          setListening(false);
-          setSpeakError(SPEAK_FAIL_TEXT);
-        },
-        onDone: () => setListening(false),
-        onStopped: () => setListening(false)
+    speakAmerican(phrase, {
+      onError: () => {
+        setListening(false);
+        setSpeakError(SPEAK_FAIL_TEXT);
       },
-      peekSpeechSpeed()
-    );
+      onDone: () => setListening(false),
+      onStopped: () => setListening(false)
+    }, peekSpeechSpeed());
   };
 
   const save = async (): Promise<void> => {

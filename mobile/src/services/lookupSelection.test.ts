@@ -54,7 +54,7 @@ describe("lookup selection", () => {
     assert.deepEqual(tapLookupWord(span, 2), { start: 2, end: 4 });
     assert.deepEqual(tapLookupWord(span, 3), { start: 1, end: 3 });
     assert.deepEqual(tapLookupWord(span, 5), { start: 1, end: 5 });
-    assert.deepEqual(tapLookupWord(span, 0), { start: 0, end: 0 });
+    assert.deepEqual(tapLookupWord({ start: 2, end: 4 }, 0), { start: 0, end: 0 });
   });
 });
 

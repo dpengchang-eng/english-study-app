@@ -1,6 +1,6 @@
 import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 import { firebaseApp } from "../firebase";
-import type { LookupResult } from "./lookup";
+import { parseLookupResult, type LookupResult } from "./lookup";
 
 const MODEL = "gemini-flash-lite-latest";
 
@@ -18,16 +18,8 @@ function parseJson(text: string): unknown {
   return JSON.parse(trimmed) as unknown;
 }
 
-function asLookup(raw: unknown): LookupResult | null {
-  if (!raw || typeof raw !== "object") return null;
-  const data = raw as Record<string, unknown>;
-  const ipa = typeof data.ipa === "string" ? data.ipa.trim() : "";
-  const senses = Array.isArray(data.senses)
-    ? data.senses.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, 3)
-    : [];
-  if (senses.length === 0) return null;
-  return { ipa, senses };
-}
+const LOOKUP_PROMPT =
+  "Return JSON only with keys ipa, senses, and simpleEn. ipa is American English phonetic. senses is up to 3 short Simplified Chinese glosses. simpleEn is one short everyday English explanation, not a dictionary essay.";
 
 async function lookupRest(phrase: string, apiKey: string): Promise<LookupResult | null> {
   const controller = new AbortController();
@@ -45,7 +37,7 @@ async function lookupRest(phrase: string, apiKey: string): Promise<LookupResult 
               role: "user",
               parts: [
                 {
-                  text: `Return JSON only with keys ipa and senses. ipa is American English phonetic. senses is up to 3 short Simplified Chinese glosses.\nPhrase: ${phrase}`
+                  text: `${LOOKUP_PROMPT}\nPhrase: ${phrase}`
                 }
               ]
             }
@@ -59,7 +51,7 @@ async function lookupRest(phrase: string, apiKey: string): Promise<LookupResult 
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     };
     const textOut = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
-    return asLookup(parseJson(textOut));
+    return parseLookupResult(parseJson(textOut));
   } catch {
     return null;
   } finally {
@@ -79,9 +71,9 @@ async function lookupAiLogic(phrase: string): Promise<LookupResult | null> {
       { timeout: 8000 }
     );
     const result = await model.generateContent(
-      `Return JSON only with keys ipa and senses. ipa is American English phonetic. senses is up to 3 short Simplified Chinese glosses.\nPhrase: ${phrase}`
+      `${LOOKUP_PROMPT}\nPhrase: ${phrase}`
     );
-    return asLookup(parseJson(result.response.text()));
+    return parseLookupResult(parseJson(result.response.text()));
   } catch {
     return null;
   }

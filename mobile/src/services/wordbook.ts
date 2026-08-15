@@ -69,21 +69,23 @@ function asItem(id: string, raw: Record<string, unknown>): WordbookItem | null {
   };
 }
 
+export const SAVE_SPAN_ERROR = "只能存连续单词";
+const PHRASE_MAX = 760;
+
 export function selectWordTokens(selected: Token[], sentenceTokens: Token[] = selected): Token[] {
   const words = selected.filter((token) => token.isWord);
-  if (words.length !== selected.length || words.length < 1 || words.length > 6) {
-    throw new Error("只能存 1 到 6 个连续单词");
+  if (words.length !== selected.length || words.length < 1) {
+    throw new Error(SAVE_SPAN_ERROR);
   }
-  const ids = new Set(words.map((token) => token.id));
   const wordIds = sentenceTokens.filter((token) => token.isWord).map((token) => token.id);
   const positions = words.map((token) => wordIds.indexOf(token.id)).sort((a, b) => a - b);
-  if (positions.some((index) => index < 0)) throw new Error("只能存 1 到 6 个连续单词");
+  if (positions.some((index) => index < 0)) throw new Error(SAVE_SPAN_ERROR);
   for (let i = 1; i < positions.length; i += 1) {
-    if (positions[i] !== positions[i - 1] + 1) throw new Error("只能存 1 到 6 个连续单词");
+    if (positions[i] !== positions[i - 1] + 1) throw new Error(SAVE_SPAN_ERROR);
   }
   return wordIds.slice(positions[0], positions[positions.length - 1] + 1).map((id) => {
     const token = sentenceTokens.find((item) => item.id === id);
-    if (!token?.isWord) throw new Error("只能存 1 到 6 个连续单词");
+    if (!token?.isWord) throw new Error(SAVE_SPAN_ERROR);
     return token;
   });
 }
@@ -102,7 +104,7 @@ async function writeLocal(uid: string, items: WordbookItem[]): Promise<void> {
 
 function toFirestore(item: WordbookItem): Record<string, unknown> {
   return {
-    phrase: item.phrase.slice(0, 180),
+    phrase: item.phrase.slice(0, PHRASE_MAX),
     ipa: item.ipa.slice(0, 80),
     senses: item.senses.slice(0, 3),
     sentenceContext: item.sentenceContext.slice(0, 760),
@@ -212,7 +214,7 @@ export async function saveToWordbook(
   const now = Date.now();
   const item: WordbookItem = {
     id: lemmaKey,
-    phrase: phrase.slice(0, 180),
+    phrase: phrase.slice(0, PHRASE_MAX),
     ipa: input.ipa.slice(0, 80),
     senses: input.senses.slice(0, 3),
     sentenceContext: sentenceText,

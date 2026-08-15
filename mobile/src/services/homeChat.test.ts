@@ -117,13 +117,18 @@ describe("Home conversation window", () => {
   it("no longer auto-navigates on convert and keeps copy/listen on the reply", () => {
     const home = readFileSync(new URL("../screens/HomeScreen.tsx", import.meta.url), "utf8");
     const turn = readFileSync(new URL("../components/ChatTurn.tsx", import.meta.url), "utf8");
+    const helpers = readFileSync(new URL("./homeChat.ts", import.meta.url), "utf8");
+    const sendFn = home.match(/const send = \(\): void => \{[\s\S]*?\n  \};/)?.[0] ?? "";
     assert.match(home, /sendFromComposer/);
     assert.match(home, /startConversion/);
-    assert.doesNotMatch(home, /sendFromComposer[\s\S]*navigate\(\s*["']Result["']/);
+    assert.match(sendFn, /sendFromComposer/);
+    assert.doesNotMatch(sendFn, /navigate/);
     assert.match(home, /openResult/);
-    assert.match(turn, /复制全文/);
+    assert.match(home, /onOpenResult=\{\(\) => openResult/);
+    assert.match(helpers, /复制全文/);
+    assert.match(helpers, /"听"/);
+    assert.match(turn, /HOME_COPY_ACTION/);
     assert.match(turn, /HOME_LISTEN_ACTION/);
-    assert.match(turn, /听/);
     assert.doesNotMatch(home, /最近/);
     assert.doesNotMatch(home, /ComposeCard/);
     assert.doesNotMatch(home, /showMic/);

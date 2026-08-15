@@ -1,10 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { addDoc, collection, doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "../firebase";
-import type { PracticeCard, SrsBox, SubmitPracticeResult, WordbookItem } from "../types";
+import type { PracticeCard, SubmitPracticeResult, WordbookItem } from "../types";
 import { resolveBlankSpan } from "./blank";
 import { acceptedAnswers, answerFromSources, isCorrectGuess, type StoredAnswer } from "./practiceGrade";
+import { applyBox, nextGoodBox } from "./practiceSrs";
 import { queryDueWordbook, updateWordbookSrs } from "./wordbook";
+
+export { applyBox, nextGoodBox } from "./practiceSrs";
 
 export { blankedText, blankParts, FIXED_BLANK, resolveBlankSpan } from "./blank";
 
@@ -46,25 +49,6 @@ async function readRemoteAnswerKey(uid: string, sessionId: string): Promise<Reco
   } catch {
     return null;
   }
-}
-
-function applyBox(item: WordbookItem, box: SrsBox, now: number): WordbookItem {
-  const days: Record<SrsBox, number> = { 0: 0, 1: 1, 2: 3, 3: 7 };
-  const dueAt = box === 0 ? now + 60_000 : now + days[box] * 24 * 60 * 60 * 1000;
-  return {
-    ...item,
-    box,
-    intervalDays: days[box] as 0 | 1 | 3 | 7,
-    lastResult: box === 0 ? "again" : (String(days[box]) as "1" | "3" | "7"),
-    dueAt,
-    reviewCount: item.reviewCount + 1
-  };
-}
-
-function nextGoodBox(box: SrsBox): SrsBox {
-  if (box <= 0) return 1;
-  if (box === 1) return 2;
-  return 3;
 }
 
 export async function createPractice(uid: string, items: WordbookItem[]): Promise<PracticeSession> {

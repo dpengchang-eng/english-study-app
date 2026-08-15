@@ -17,7 +17,7 @@ import {
   type WordSpan
 } from "../services/lookupSelection";
 import { peekSpeechSpeed } from "../services/speechSpeed";
-import { phraseFromTokens } from "../services/wordbook";
+import { EMPTY_SELECTION, phraseFromTokens } from "../services/wordbook";
 import { SPEAK_FAIL_TEXT, speakAmerican, stopSpeaking } from "../services/tts";
 import { colors, space } from "../theme";
 import type { Sentence, Token } from "../types";
@@ -61,12 +61,13 @@ export function LookupScreen() {
   const words = wordTokens(tokens);
   const selected = tokensForSpan(tokens, span);
   const wholeOn = isWholeSentence(span, words.length);
-  const phrase = wholeOn ? (sentence?.text ?? route.params.sentenceText) : phraseFromTokens(selected).phrase;
-  const lemma = selected[0]?.lemma || phraseFromTokens(selected).lemmaKey;
-  const lemmaKey = phraseFromTokens(selected).lemmaKey;
+  const sentenceContext = sentence?.text ?? route.params.sentenceText;
+  const built = phraseFromTokens(selected, sentenceContext);
+  const phrase = built.phrase;
+  const lemma = selected.find((token) => token.isWord)?.lemma || built.lemmaKey;
+  const lemmaKey = built.lemmaKey;
   const alreadySaved = items.some((item) => item.id === lemmaKey);
   const [ipa, setIpa] = useState("");
-  const [pos, setPos] = useState("");
   const [senses, setSenses] = useState<string[]>([]);
   const [simpleEn, setSimpleEn] = useState("");
   const [loading, setLoading] = useState(true);
@@ -75,7 +76,6 @@ export function LookupScreen() {
   const [listening, setListening] = useState(false);
   const canPrev = sentenceIndex > 0;
   const canNext = sentenceIndex < sentences.length - 1;
-  const sentenceContext = sentence?.text ?? route.params.sentenceText;
 
   useEffect(() => {
     return () => stopSpeaking();
@@ -94,14 +94,12 @@ export function LookupScreen() {
     let live = true;
     setLoading(true);
     setIpa("");
-    setPos("");
     setSenses([]);
     setSimpleEn("");
     void lookupWord({ lemma, surface: phrase, sentenceContext })
       .then((result) => {
         if (!live) return;
         setIpa(result.ipa);
-        setPos(result.pos);
         setSenses(result.senses.slice(0, 3));
         setSimpleEn(result.simpleEn);
         setLoading(false);
@@ -109,7 +107,6 @@ export function LookupScreen() {
       .catch(() => {
         if (!live) return;
         setIpa("");
-        setPos("");
         setSenses([]);
         setSimpleEn("");
         setLoading(false);
@@ -162,15 +159,16 @@ export function LookupScreen() {
         sentenceText: sentenceContext,
         conversionId: route.params.conversionId,
         ipa,
-        senses: senses.slice(0, 3)
+        senses: senses.slice(0, 3),
+        simpleEn
       });
       if (!result.created) {
         setSaved("已在词本");
         return;
       }
       setSaved(result.item.syncState === "synced" ? "已加入词本" : "未同步到云");
-    } catch {
-      setSaved("没有可保存的词");
+    } catch (error) {
+      setSaved(error instanceof Error && error.message === EMPTY_SELECTION ? EMPTY_SELECTION : "没存上，再试一次");
     }
   };
 
@@ -207,7 +205,6 @@ export function LookupScreen() {
         </Pressable>
       </View>
       {loading ? <ActivityIndicator color={colors.accent} /> : null}
-      {!loading && pos ? <Text style={styles.pos}>{pos}</Text> : null}
       {!loading && ipa ? <Text style={styles.ipa}>{ipa}</Text> : null}
       {!loading
         ? senses.slice(0, 3).map((sense) => (
@@ -246,7 +243,6 @@ const styles = StyleSheet.create({
   navOn: { color: colors.accent, fontWeight: "700", fontSize: 16 },
   navOff: { color: colors.muted, fontWeight: "700", fontSize: 16 },
   navPipe: { color: colors.muted, fontSize: 16 },
-  pos: { color: colors.muted, fontSize: 14, textTransform: "lowercase" },
   ipa: { color: colors.muted, fontSize: 16 },
   sense: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   simpleEn: { color: colors.ink, fontSize: 16, lineHeight: 24 },

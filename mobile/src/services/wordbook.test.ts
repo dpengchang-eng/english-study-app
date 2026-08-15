@@ -1,57 +1,159 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { Token } from "../types";
-import { blankSpan, phraseFromTokens, selectWordTokens } from "./wordbook";
-import { tokensForSpan, wholeSentenceSpan } from "./lookupSelection";
+import { PHRASE_MAX, SENTENCE_CONTEXT_MAX } from "../types";
+import {
+  consecutiveTokenSpan,
+  EMPTY_SELECTION,
+  selectWordTokens,
+  wordbookDraftFromSelection
+} from "./wordbookSelect";
 
-function word(id: string, surface: string, start: number): Token {
-  return {
-    id,
-    lemma: surface.toLowerCase(),
-    surface,
-    isWord: true,
-    charStart: start,
-    charEnd: start + surface.length
-  };
+const sentence = "I'd like to grab coffee with you sometime — does that work for you?";
+
+function tokensFrom(text: string): Token[] {
+  const tokens: Token[] = [];
+  const re = /[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+|[^\s]/g;
+  let match: RegExpExecArray | null;
+  let index = 0;
+  while ((match = re.exec(text)) !== null) {
+    const surface = match[0];
+    tokens.push({
+      id: `s0_t${index}`,
+      lemma: surface.toLowerCase(),
+      surface,
+      isWord: /[A-Za-z0-9]/.test(surface),
+      charStart: match.index,
+      charEnd: match.index + surface.length
+    });
+    index += 1;
+  }
+  return tokens;
 }
 
-function punct(id: string, surface: string, start: number): Token {
-  return { id, lemma: surface, surface, isWord: false, charStart: start, charEnd: start + surface.length };
+function words(tokens: Token[]): Token[] {
+  return tokens.filter((token) => token.isWord);
 }
 
-const sentence = [
-  word("t0", "I'd", 0),
-  word("t1", "like", 4),
-  word("t2", "to", 9),
-  word("t3", "grab", 12),
-  word("t4", "coffee", 17),
-  word("t5", "with", 24),
-  word("t6", "you", 29),
-  word("t7", "sometime", 33)
-];
+describe("saveToWordbook selection", () => {
+  const tokens = tokensFrom(sentence);
 
-describe("saveToWordbook", () => {
-  it("allows a consecutive span longer than six words", () => {
-    const selected = selectWordTokens(sentence, sentence);
-    assert.equal(selected.length, 8);
-    assert.equal(phraseFromTokens(selected).phrase, "I'd like to grab coffee with you sometime");
+  it("saves a 7+ word span and blanks that exact selection", () => {
+    const seven = words(tokens).slice(0, 7);
+    assert.ok(seven.length >= 7);
+    const draft = wordbookDraftFromSelection({
+      tokens: seven,
+      sentenceTokens: tokens,
+      sentenceText: sentence,
+      conversionId: "c1",
+      ipa: "",
+      senses: ["喜欢约咖啡"],
+      simpleEn: "This is about meeting for coffee."
+    });
+    assert.equal(draft.phrase, "I'd like to grab coffee with you");
+    assert.equal(sentence.slice(draft.blankStart, draft.blankEnd), draft.phrase);
+    assert.equal(draft.simpleEn, "This is about meeting for coffee.");
+    assert.ok(draft.lemmaKey);
   });
 
-  it("lets punctuation stay in a whole-sentence span and blanks the sentence", () => {
-    const text = "I'd like coffee.";
-    const tokens = [word("w0", "I'd", 0), word("w1", "like", 4), word("w2", "coffee", 9), punct("p0", ".", 15)];
-    const span = wholeSentenceSpan(3);
-    const selected = tokensForSpan(tokens, span);
-    assert.equal(selected[selected.length - 1]?.surface, ".");
-    const blank = blankSpan(text, selected, tokens);
-    assert.deepEqual(blank, { start: 0, end: text.length });
-    assert.equal(text.slice(blank.start, blank.end), text);
+  it("saves a whole-sentence span, including punctuation, as one cloze blank", () => {
+    const allWords = words(tokens);
+    const draft = wordbookDraftFromSelection({
+      tokens: [allWords[0], allWords[allWords.length - 1]],
+      sentenceTokens: tokens,
+      sentenceText: sentence,
+      conversionId: "c1",
+      ipa: "",
+      senses: [],
+      simpleEn: ""
+    });
+    assert.equal(draft.phrase, sentence);
+    assert.equal(draft.blankStart, 0);
+    assert.equal(draft.blankEnd, sentence.length);
+    assert.equal(sentence.slice(draft.blankStart, draft.blankEnd), sentence);
+    assert.ok(selectWordTokens(allWords, tokens).some((token) => token.surface === "?"));
   });
 
-  it("sets blankSpan to the current selection and rejects only an empty selection", () => {
-    const text = "I'd like to grab coffee with you sometime.";
-    const part = blankSpan(text, [sentence[4]], sentence);
-    assert.equal(text.slice(part.start, part.end), "coffee");
-    assert.throws(() => selectWordTokens([], sentence), /没有可保存的词/);
+  it("rejects only an empty selection", () => {
+    assert.throws(() => selectWordTokens([], tokens), { message: EMPTY_SELECTION });
+    assert.throws(
+      () =>
+        wordbookDraftFromSelection({
+          tokens: [],
+          sentenceTokens: tokens,
+          sentenceText: sentence,
+          conversionId: "c1",
+          ipa: "",
+          senses: []
+        }),
+      { message: EMPTY_SELECTION }
+    );
+  });
+
+  it("keeps a long phrase up to the sentenceContext cap, not 180", () => {
+    assert.equal(PHRASE_MAX, SENTENCE_CONTEXT_MAX);
+    assert.equal(PHRASE_MAX, 760);
+    const draft = wordbookDraftFromSelection({
+      tokens: words(tokens),
+      sentenceTokens: tokens,
+      sentenceText: sentence,
+      conversionId: "c1",
+      ipa: "",
+      senses: []
+    });
+    assert.ok(draft.phrase.length > 40);
+    assert.ok(draft.phrase.length <= PHRASE_MAX);
+  });
+
+  it("does not reset SRS fields when the same slug already exists", () => {
+    const draft = wordbookDraftFromSelection({
+      tokens: words(tokens).slice(3, 5),
+      sentenceTokens: tokens,
+      sentenceText: sentence,
+      conversionId: "c1",
+      ipa: "/ɡræb/",
+      senses: ["随手拿"]
+    });
+    const existing = {
+      id: draft.lemmaKey,
+      dueAt: 9_999,
+      box: 2 as const,
+      intervalDays: 3 as const,
+      reviewCount: 4
+    };
+    assert.equal(existing.id, draft.lemmaKey);
+    assert.equal(existing.dueAt, 9_999);
+    assert.equal(existing.box, 2);
+  });
+});
+
+describe("consecutiveTokenSpan", () => {
+  const tokens = tokensFrom(sentence);
+
+  it("lets a long-press span cover 7+ words and the whole sentence", () => {
+    const all = words(tokens);
+    const seven = consecutiveTokenSpan(tokens, all[0], all[6]);
+    assert.ok(seven);
+    assert.ok(seven.filter((token) => token.isWord).length >= 7);
+    const whole = consecutiveTokenSpan(tokens, all[0], all[all.length - 1]);
+    assert.ok(whole);
+    assert.equal(whole[0]?.surface, "I'd");
+    assert.equal(whole.at(-1)?.surface, "?");
+  });
+});
+
+describe("1-6 error copy is gone", () => {
+  it("does not mention the old 1 to 6 word cap", () => {
+    const files = [
+      readFileSync(new URL("./wordbook.ts", import.meta.url), "utf8"),
+      readFileSync(new URL("./wordbookSelect.ts", import.meta.url), "utf8"),
+      readFileSync(new URL("../screens/LookupScreen.tsx", import.meta.url), "utf8"),
+      readFileSync(new URL("../screens/ResultScreen.tsx", import.meta.url), "utf8")
+    ];
+    for (const source of files) {
+      assert.doesNotMatch(source, /只能存 1 到 6 个连续单词/);
+      assert.doesNotMatch(source, /to - from \+ 1 > 6/);
+    }
   });
 });

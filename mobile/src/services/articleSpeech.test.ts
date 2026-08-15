@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { indexById, nextPlayIndex, resolveStartIndex, speakableItems } from "./articleSpeech";
+import { currentPlay, indexById, nextPlayIndex, resolveStartIndex, speakableItems } from "./articleSpeech";
 
 describe("speakableItems", () => {
   it("drops blank sentences so a long article still plays the real lines", () => {
@@ -64,6 +64,29 @@ describe("indexById", () => {
     assert.equal(indexById(items, "s1"), 1);
     assert.equal(indexById(items, "missing"), null);
     assert.equal(indexById(items, null), null);
+  });
+});
+
+describe("currentPlay", () => {
+  const items = [{ id: "s0" }, { id: "s1" }, { id: "s2" }];
+
+  it("keeps the same sentence and mode when speed changes", () => {
+    for (const mode of ["once", "loopOne", "all", "loopAll"] as const) {
+      assert.deepEqual(currentPlay(mode, "s1", items), { mode, index: 1 });
+    }
+  });
+
+  it("does nothing when idle or the sentence is gone", () => {
+    assert.equal(currentPlay("idle", "s1", items), null);
+    assert.equal(currentPlay("all", null, items), null);
+    assert.equal(currentPlay("once", "missing", items), null);
+  });
+
+  it("after a speed change, 听全文 and 复读全文 keep walking from this sentence", () => {
+    const playAll = currentPlay("all", "s1", items);
+    assert.equal(playAll && nextPlayIndex(playAll.mode, playAll.index, items.length), 2);
+    const playLoop = currentPlay("loopAll", "s2", items);
+    assert.equal(playLoop && nextPlayIndex(playLoop.mode, playLoop.index, items.length), 0);
   });
 });
 

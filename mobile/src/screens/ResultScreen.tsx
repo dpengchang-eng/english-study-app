@@ -1,7 +1,7 @@
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Clipboard from "expo-clipboard";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { EmptyHint } from "../components/EmptyHint";
 import { ErrorState } from "../components/ErrorState";
@@ -15,6 +15,7 @@ import { ensureTappableTokens } from "../services/align";
 import {
   loadSpeechSpeed,
   nextSpeechSpeed,
+  peekSpeechSpeed,
   saveSpeechSpeed,
   speechSpeedLabel,
   type SpeechSpeed
@@ -47,7 +48,9 @@ export function ResultScreen() {
   const [copied, setCopied] = useState(false);
   const [picked, setPicked] = useState<{ sentence: Sentence; tokens: Token[] } | null>(null);
   const [speakError, setSpeakError] = useState<string | null>(null);
-  const [speed, setSpeed] = useState<SpeechSpeed>(1);
+  const [speed, setSpeed] = useState<SpeechSpeed>(peekSpeechSpeed);
+  const speedHold = useRef<SpeechSpeed>(speed);
+  const speedDirty = useRef(false);
   const { mode, playingId, toggle, playOnce, loopOne, restartCurrent, stop } = useArticleSpeech(
     sentences,
     () => setSpeakError(SPEAK_FAIL_TEXT),
@@ -57,8 +60,18 @@ export function ResultScreen() {
   const isAnonymous = !auth.currentUser || auth.currentUser.isAnonymous;
 
   useEffect(() => {
-    void loadSpeechSpeed().then(setSpeed);
-  }, []);
+    let live = true;
+    void loadSpeechSpeed().then((saved) => {
+      if (!live || speedDirty.current) return;
+      if (saved === speedHold.current) return;
+      speedHold.current = saved;
+      setSpeed(saved);
+      restartCurrent(saved);
+    });
+    return () => {
+      live = false;
+    };
+  }, [restartCurrent]);
 
   useEffect(() => {
     if (!conversion || conversion.status !== "loading") return;
@@ -109,7 +122,9 @@ export function ResultScreen() {
   };
 
   const onCycleSpeed = (): void => {
-    const next = nextSpeechSpeed(speed);
+    speedDirty.current = true;
+    const next = nextSpeechSpeed(speedHold.current);
+    speedHold.current = next;
     setSpeed(next);
     void saveSpeechSpeed(next);
     restartCurrent(next);

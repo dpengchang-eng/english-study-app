@@ -30,6 +30,18 @@ describe("listen tts", () => {
     assert.match(speed, /语速/);
     assert.match(result, /onCycleSpeed/);
     assert.match(result, /restartCurrent/);
+    assert.match(result, /speedHold/);
+    assert.match(result, /speedDirty/);
+    assert.match(result, /peekSpeechSpeed/);
+    assert.doesNotMatch(result, /Slider/);
+    assert.match(hook, /currentPlay/);
+    assert.match(hook, /modeRef/);
+    assert.match(hook, /playingIdRef/);
+    assert.match(hook, /speakAmerican\(item\.text, handlers, speedRef\.current\)/);
+    assert.match(hook, /continueSpeaking\(item\.text, handlers, speedRef\.current\)/);
+    const me = readFileSync(new URL("../screens/MeScreen.tsx", import.meta.url), "utf8");
+    assert.doesNotMatch(me, /语速/);
+    assert.doesNotMatch(me, /Slider/);
     assert.match(result, /onLoop/);
     assert.match(list, /"停止" : "单听"/);
     assert.doesNotMatch(list, /"停止" : "听"/);

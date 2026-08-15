@@ -65,3 +65,28 @@ describe("indexById", () => {
     assert.equal(indexById(items, null), null);
   });
 });
+
+function heard(mode: "once" | "all" | "loopOne" | "loopAll", length: number, selected: number | null, steps: number): number[] {
+  let index = resolveStartIndex(mode, length, selected);
+  const ids: number[] = [];
+  while (index != null && ids.length < steps) {
+    ids.push(index);
+    index = nextPlayIndex(mode, index, length);
+  }
+  return ids;
+}
+
+describe("article playthrough", () => {
+  it("plays a multi-sentence result all the way through with 听全文", () => {
+    assert.deepEqual(heard("all", 5, 2, 10), [0, 1, 2, 3, 4]);
+  });
+
+  it("repeats one sentence for 单句循环 and the article for 全文循环", () => {
+    assert.deepEqual(heard("loopOne", 5, 2, 4), [2, 2, 2, 2]);
+    assert.deepEqual(heard("loopAll", 3, 0, 7), [0, 1, 2, 0, 1, 2, 0]);
+  });
+
+  it("keeps per-sentence 听 as play once", () => {
+    assert.deepEqual(heard("once", 5, 3, 10), [3]);
+  });
+});

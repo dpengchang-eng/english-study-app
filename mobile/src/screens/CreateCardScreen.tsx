@@ -15,6 +15,12 @@ import { startListening, stopListening, useSpeechEvents } from "../services/stt"
 import { INPUT_CHAR_CAP, RECORD_MAX_MS, UNCATEGORIZED_ID, type RewriteRadio, type SourceType } from "../types";
 import { colors, space } from "../theme";
 
+const RADIO_LABEL: Record<RewriteRadio, string> = {
+  0: "保留原文",
+  1: "目标语言",
+  2: "改写+回复"
+};
+
 const RADIO_HINT: Record<RewriteRadio, string> = {
   0: "完成时只保留原文",
   1: "完成时改写成目标语言",
@@ -247,7 +253,7 @@ export function CreateCardScreen() {
               }}
             >
               <View style={styles.radioOuter}>{radio === value ? <View style={styles.radioInner} /> : null}</View>
-              {value === 1 ? <Text style={styles.radioHint}>目标语言</Text> : <View style={styles.radioSpacer} />}
+              <Text style={styles.radioHint}>{RADIO_LABEL[value]}</Text>
             </Pressable>
           ))}
         </View>
@@ -275,8 +281,7 @@ const styles = StyleSheet.create({
   counter: { marginLeft: "auto", color: colors.muted, fontSize: 12 },
   radios: { flexDirection: "row", justifyContent: "center", alignItems: "flex-start", gap: 28, paddingVertical: 12 },
   radio: { padding: 8, alignItems: "center", gap: 6 },
-  radioHint: { fontSize: 11, color: colors.muted },
-  radioSpacer: { height: 14 },
+  radioHint: { fontSize: 11, color: colors.muted, textAlign: "center" },
   radioOuter: {
     width: 20,
     height: 20,

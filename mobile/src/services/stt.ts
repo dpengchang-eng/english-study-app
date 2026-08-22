@@ -30,7 +30,7 @@ export function useSpeechEvents(handlers: {
 }
 
 export async function startListening(lang: SpeechLang): Promise<void> {
-  const available = ExpoSpeechRecognitionModule.isRecognitionAvailable();
+  const available = Boolean(ExpoSpeechRecognitionModule?.isRecognitionAvailable?.());
   if (!available) {
     throw new Error("这台设备没有语音识别。请直接打字。");
   }

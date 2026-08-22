@@ -1,11 +1,20 @@
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { HomeScreen } from "../screens/HomeScreen";
-import { ResultScreen } from "../screens/ResultScreen";
+import { AiAssistantScreen } from "../screens/AiAssistantScreen";
+import { CardDetailScreen } from "../screens/CardDetailScreen";
+import { CreateCardScreen } from "../screens/CreateCardScreen";
+import { HomeFeedScreen } from "../screens/HomeFeedScreen";
+import { MeScreen } from "../screens/MeScreen";
+import { MemoriesScreen } from "../screens/MemoriesScreen";
+import { MysteryBoxScreen } from "../screens/MysteryBoxScreen";
+import { NewCollectionScreen } from "../screens/NewCollectionScreen";
+import { RecallSessionScreen } from "../screens/RecallSessionScreen";
+import { RecordCalendarScreen } from "../screens/RecordCalendarScreen";
+import { SearchScreen } from "../screens/SearchScreen";
 import { colors } from "../theme";
-import type { ConvertStackParamList } from "./types";
+import type { RootStackParamList } from "./types";
 
-const ConvertStack = createNativeStackNavigator<ConvertStackParamList>();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const theme = {
   ...DefaultTheme,
@@ -22,17 +31,19 @@ const theme = {
 export function RootNavigator() {
   return (
     <NavigationContainer theme={theme}>
-      <ConvertStack.Navigator
-        screenOptions={{
-          headerShadowVisible: false,
-          headerStyle: { backgroundColor: colors.bg },
-          headerTintColor: colors.ink,
-          contentStyle: { backgroundColor: colors.bg }
-        }}
-      >
-        <ConvertStack.Screen name="Home" component={HomeScreen} options={{ title: "地道" }} />
-        <ConvertStack.Screen name="Result" component={ResultScreen} options={{ title: "结果" }} />
-      </ConvertStack.Navigator>
+      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+        <Stack.Screen name="Home" component={HomeFeedScreen} />
+        <Stack.Screen name="CardDetail" component={CardDetailScreen} />
+        <Stack.Screen name="CreateCard" component={CreateCardScreen} />
+        <Stack.Screen name="Search" component={SearchScreen} />
+        <Stack.Screen name="Memories" component={MemoriesScreen} />
+        <Stack.Screen name="RecordCalendar" component={RecordCalendarScreen} />
+        <Stack.Screen name="RecallSession" component={RecallSessionScreen} />
+        <Stack.Screen name="MysteryBox" component={MysteryBoxScreen} />
+        <Stack.Screen name="AiAssistant" component={AiAssistantScreen} />
+        <Stack.Screen name="Me" component={MeScreen} />
+        <Stack.Screen name="NewCollection" component={NewCollectionScreen} />
+      </Stack.Navigator>
     </NavigationContainer>
   );
 }

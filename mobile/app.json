@@ -30,6 +30,13 @@
     },
     "plugins": [
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "地道需要相册，给卡片加上图片。",
+          "cameraPermission": "地道需要相机，给卡片加上图片。"
+        }
+      ],
+      [
         "expo-speech-recognition",
         {
           "microphonePermission": "地道需要麦克风来听你说的中文或英文。",

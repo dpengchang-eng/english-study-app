@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native";
 import { colors } from "../theme";
 
-/** Line eye, drawn so hide/show never falls back to a photo emoji. */
+/** Material-style visibility icon. Outline only, never a photo emoji. */
 export function EyeIcon({
   color = colors.ink,
   slashed = false
@@ -11,31 +11,33 @@ export function EyeIcon({
 }) {
   return (
     <View style={styles.wrap}>
-      <View style={[styles.lid, { borderColor: color }]} />
-      <View style={[styles.pupil, { backgroundColor: color }]} />
+      <View style={[styles.almond, { borderColor: color }]} />
+      <View style={[styles.iris, { borderColor: color }]} />
       {slashed ? <View style={[styles.slash, { backgroundColor: color }]} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: 20, height: 20, alignItems: "center", justifyContent: "center" },
-  lid: {
-    width: 16,
-    height: 10,
-    borderWidth: 1.6,
-    borderRadius: 8
+  wrap: { width: 22, height: 22, alignItems: "center", justifyContent: "center" },
+  almond: {
+    width: 14,
+    height: 14,
+    borderWidth: 1.8,
+    borderRadius: 7,
+    transform: [{ scaleX: 1.35 }, { scaleY: 0.7 }]
   },
-  pupil: {
+  iris: {
     position: "absolute",
-    width: 4,
-    height: 4,
-    borderRadius: 2
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 1.8
   },
   slash: {
     position: "absolute",
-    width: 18,
-    height: 1.6,
+    width: 20,
+    height: 1.8,
     borderRadius: 1,
     transform: [{ rotate: "-40deg" }]
   }

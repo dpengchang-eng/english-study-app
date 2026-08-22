@@ -37,7 +37,7 @@ export function PracticeToolbar({
         <HeadphonesIcon color={mode === "dictation" ? colors.ink : colors.muted} />
       </Pressable>
       <Pressable onPress={onToggleHidden} hitSlop={8} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="显示">
-        <EyeIcon slashed={hidden} color={hidden ? colors.ink : colors.muted} />
+        <EyeIcon slashed={hidden} color={colors.ink} />
       </Pressable>
       <Pressable onPress={onFill} disabled={!fillEnabled && mode !== "fill"} hitSlop={4}>
         <View style={[styles.pill, mode === "fill" && styles.pillOn, !fillEnabled && mode !== "fill" && styles.pillOff]}>

@@ -46,7 +46,7 @@ export function RewriteBlock({
   if (hidden || mode === "dictation") {
     return (
       <View style={styles.block}>
-        <Text style={styles.hidden}>内容已隐藏，点 👁 显示，或用 🎧 听写。</Text>
+        <Text style={styles.hidden}>内容已隐藏，点眼睛显示，或用耳机听写。</Text>
       </View>
     );
   }

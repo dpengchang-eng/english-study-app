@@ -1,4 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { EyeIcon } from "./EyeIcon";
+import { HeadphonesIcon } from "./HeadphonesIcon";
 import { colors } from "../theme";
 
 export type PracticeMode = "read" | "fill" | "select" | "dictation";
@@ -31,11 +33,11 @@ export function PracticeToolbar({
       <Pressable onPress={onToggleOriginal} hitSlop={8} style={styles.iconBtn}>
         <Text style={[styles.icon, showingOriginal && styles.on]}>⇄</Text>
       </Pressable>
-      <Pressable onPress={onDictation} hitSlop={8} style={styles.iconBtn}>
-        <Text style={[styles.icon, mode === "dictation" && styles.on]}>🎧</Text>
+      <Pressable onPress={onDictation} hitSlop={8} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="听写">
+        <HeadphonesIcon color={mode === "dictation" ? colors.ink : colors.muted} />
       </Pressable>
-      <Pressable onPress={onToggleHidden} hitSlop={8} style={styles.iconBtn}>
-        <Text style={[styles.icon, hidden && styles.on]}>👁</Text>
+      <Pressable onPress={onToggleHidden} hitSlop={8} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="显示">
+        <EyeIcon slashed={hidden} color={hidden ? colors.ink : colors.muted} />
       </Pressable>
       <Pressable onPress={onFill} disabled={!fillEnabled && mode !== "fill"} hitSlop={4}>
         <View style={[styles.pill, mode === "fill" && styles.pillOn, !fillEnabled && mode !== "fill" && styles.pillOff]}>

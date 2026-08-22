@@ -35,7 +35,7 @@ const CHUNKS: Array<[string, string]> = [
   ["今天", "today"],
   ["明天", "tomorrow"],
   ["昨天", "yesterday"]
-].sort((a, b) => b[0].length - a[0].length);
+].sort((a, b) => b[0].length - a[0].length) as Array<[string, string]>;
 
 function normalizeKey(text: string): string {
   return text.trim().replace(/\s+/g, " ");

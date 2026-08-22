@@ -91,11 +91,16 @@ export type Collection = {
 
 export type SortOrder = "newest" | "oldest";
 
+export type UiLang = "zh-Hans" | "en";
+export type LearnLang = "en";
+export type Difficulty = "beginner" | "intermediate" | "advanced";
+export type VoiceName = "Andrew (English US)";
+
 export type LanguageSettings = {
-  uiLang: "zh-Hans";
-  learnLang: "en";
-  difficulty: "advanced";
-  voice: "Andrew (English US)";
+  uiLang: UiLang;
+  learnLang: LearnLang;
+  difficulty: Difficulty;
+  voice: VoiceName;
   multilingualStt: boolean;
 };
 

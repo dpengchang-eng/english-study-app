@@ -1,16 +1,61 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, space } from "../theme";
-import type { LanguageSettings } from "../types";
+import type { Difficulty, LanguageSettings, LearnLang, UiLang, VoiceName } from "../types";
 
-function Row({ label, value }: { label: string; value: string }) {
+const UI_LANGS: Array<{ id: UiLang; label: string }> = [
+  { id: "zh-Hans", label: "简体中文" },
+  { id: "en", label: "英语" }
+];
+
+const LEARN_LANGS: Array<{ id: LearnLang; label: string }> = [{ id: "en", label: "英语" }];
+
+const DIFFICULTIES: Array<{ id: Difficulty; label: string }> = [
+  { id: "beginner", label: "初级" },
+  { id: "intermediate", label: "中级" },
+  { id: "advanced", label: "进阶" }
+];
+
+const VOICES: Array<{ id: VoiceName; label: string }> = [{ id: "Andrew (English US)", label: "Andrew (English US)" }];
+
+function labelOf<T extends string>(list: Array<{ id: T; label: string }>, id: T): string {
+  return list.find((item) => item.id === id)?.label ?? id;
+}
+
+function Picker<T extends string>({
+  label,
+  value,
+  options,
+  open,
+  onOpen,
+  onPick
+}: {
+  label: string;
+  value: T;
+  options: Array<{ id: T; label: string }>;
+  open: boolean;
+  onOpen: () => void;
+  onPick: (id: T) => void;
+}) {
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.box}>
-        <Text style={styles.value}>{value}</Text>
-        <Text style={styles.chev}>▾</Text>
-      </View>
+      <Pressable style={styles.box} onPress={onOpen} accessibilityRole="button" accessibilityLabel={label}>
+        <Text style={styles.value}>{labelOf(options, value)}</Text>
+        <Text style={styles.chev}>{open ? "▴" : "▾"}</Text>
+      </Pressable>
+      {open
+        ? options.map((item) => (
+            <Pressable
+              key={item.id}
+              style={[styles.option, item.id === value && styles.optionOn]}
+              onPress={() => onPick(item.id)}
+            >
+              <Text style={styles.optionText}>{item.label}</Text>
+              {item.id === value ? <Text style={styles.mark}>✓</Text> : null}
+            </Pressable>
+          ))
+        : null}
     </View>
   );
 }
@@ -27,9 +72,18 @@ export function LanguageSettingsModal({
   onSave: (next: LanguageSettings) => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const [open, setOpen] = useState<string | null>(null);
   useEffect(() => {
-    if (visible) setDraft(value);
+    if (visible) {
+      setDraft(value);
+      setOpen(null);
+    }
   }, [visible, value]);
+
+  const toggle = (key: string): void => {
+    setOpen((current) => (current === key ? null : key));
+  };
+
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel}>
       <View style={styles.mask}>
@@ -40,10 +94,50 @@ export function LanguageSettingsModal({
               <Text style={styles.close}>✕</Text>
             </Pressable>
           </View>
-          <Row label="App UI 语言" value="简体中文" />
-          <Row label="学习语言" value="英语" />
-          <Row label="表达难度" value="进阶" />
-          <Row label="语音音色" value="Andrew (English US)" />
+          <Picker
+            label="App UI 语言"
+            value={draft.uiLang}
+            options={UI_LANGS}
+            open={open === "ui"}
+            onOpen={() => toggle("ui")}
+            onPick={(id) => {
+              setDraft((prev) => ({ ...prev, uiLang: id }));
+              setOpen(null);
+            }}
+          />
+          <Picker
+            label="学习语言"
+            value={draft.learnLang}
+            options={LEARN_LANGS}
+            open={open === "learn"}
+            onOpen={() => toggle("learn")}
+            onPick={(id) => {
+              setDraft((prev) => ({ ...prev, learnLang: id }));
+              setOpen(null);
+            }}
+          />
+          <Picker
+            label="表达难度"
+            value={draft.difficulty}
+            options={DIFFICULTIES}
+            open={open === "diff"}
+            onOpen={() => toggle("diff")}
+            onPick={(id) => {
+              setDraft((prev) => ({ ...prev, difficulty: id }));
+              setOpen(null);
+            }}
+          />
+          <Picker
+            label="语音音色"
+            value={draft.voice}
+            options={VOICES}
+            open={open === "voice"}
+            onOpen={() => toggle("voice")}
+            onPick={(id) => {
+              setDraft((prev) => ({ ...prev, voice: id }));
+              setOpen(null);
+            }}
+          />
           <Text style={styles.adv}>语音输入高级设置</Text>
           <Pressable
             style={styles.checkRow}
@@ -87,6 +181,18 @@ const styles = StyleSheet.create({
   },
   value: { color: colors.ink, fontSize: 14 },
   chev: { color: colors.muted },
+  option: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  optionOn: { backgroundColor: colors.accentSoft },
+  optionText: { color: colors.ink, fontSize: 14 },
+  mark: { color: colors.ink, fontWeight: "800" },
   adv: { marginTop: 6, fontSize: 13, color: colors.ink },
   checkRow: {
     flexDirection: "row",

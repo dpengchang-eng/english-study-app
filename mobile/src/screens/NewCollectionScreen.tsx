@@ -31,25 +31,35 @@ export function NewCollectionScreen() {
         </Pressable>
       </View>
       <View style={styles.body}>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="生活集名称"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          autoFocus
-        />
+        <View style={styles.card}>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="生活集名称"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            autoFocus
+          />
+        </View>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.md, paddingVertical: 12 },
-  title: { fontSize: 16, fontWeight: "800", color: colors.ink },
-  link: { fontSize: 16, color: colors.ink, fontWeight: "600" },
+  safe: { flex: 1, backgroundColor: colors.page },
+  head: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: space.md,
+    paddingVertical: 14,
+    backgroundColor: colors.page
+  },
+  title: { fontSize: 16, fontWeight: "700", color: colors.ink },
+  link: { fontSize: 15, color: colors.ink },
   dim: { color: colors.dim },
-  body: { padding: space.md },
-  input: { borderWidth: 1, borderColor: colors.line, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, color: colors.ink }
+  body: { padding: space.sm },
+  card: { backgroundColor: colors.card, borderRadius: 12, paddingHorizontal: 14 },
+  input: { paddingVertical: 18, fontSize: 15, color: colors.ink }
 });

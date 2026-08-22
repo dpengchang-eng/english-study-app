@@ -48,25 +48,29 @@ export const SEED_CARDS: JournalCard[] = [
       { id: "s2:9-16", sentenceId: "s2", start: 9, end: 16, answer: "awesome" },
       { id: "s5:13-18", sentenceId: "s5", start: 13, end: 18, answer: "apple" }
     ],
-    createdAt: at(2026, 8, 20, 14, 55)
+    createdAt: at(2026, 8, 20, 22, 55)
   }),
   card({
     id: "c-yiwu-boxes",
     title: "1688义乌购买纸箱更便宜",
-    body: "在1688找义乌的纸箱，比别的地方便宜不少。",
-    rewrite: "Buying cartons from Yiwu on 1688 is a lot cheaper.",
-    sentences: [{ id: "s0", text: "Buying cartons from Yiwu on 1688 is a lot cheaper." }],
-    reply: "这句话短、清楚，适合记进生活英语。",
-    createdAt: at(2026, 8, 20, 12, 10)
+    body: "在1688或义乌买纸箱最划算，便宜不少。不过人在韩国就麻烦：登录有问题，还得靠微信和代购。",
+    rewrite:
+      "1688 or Yiwu Shopping is the go-to for cartons, way cheaper.\nTough if you're in Korea though—login issues, WeChat, shipping agents.",
+    sentences: [
+      { id: "s0", text: "1688 or Yiwu Shopping is the go-to for cartons, way cheaper." },
+      { id: "s1", text: "Tough if you're in Korea though—login issues, WeChat, shipping agents." }
+    ],
+    reply: "go-to 和 way cheaper 都很口语。",
+    createdAt: at(2026, 8, 17, 16, 15)
   }),
   card({
     id: "c-9102-reviews",
     title: "查找9102真实中国评价对比",
-    body: "想查一下 9102 在国内的真实评价，跟国外对比一下。",
-    rewrite: "I'm looking up real reviews of the 9102 in China and comparing them.",
-    sentences: [{ id: "s0", text: "I'm looking up real reviews of the 9102 in China and comparing them." }],
-    reply: "look up 和 compare 都是很常用的说法。",
-    createdAt: at(2026, 8, 19, 9, 40)
+    body: "帮我查 9102 在国内的真实评价和对比，别猜。",
+    rewrite: "I'll look up real reviews and comparisons from China for the 9102—no guessing.",
+    sentences: [{ id: "s0", text: "I'll look up real reviews and comparisons from China for the 9102—no guessing." }],
+    reply: "look up 和 no guessing 都是很常用的说法。",
+    createdAt: at(2026, 8, 17, 16, 12)
   }),
   card({
     id: "c-collage-map",
@@ -75,7 +79,7 @@ export const SEED_CARDS: JournalCard[] = [
     rewrite: "These files are collages, not a nationwide map.",
     sentences: [{ id: "s0", text: "These files are collages, not a nationwide map." }],
     reply: "collage 这个词记一下就够用了。",
-    createdAt: at(2026, 8, 18, 16, 5)
+    createdAt: at(2026, 8, 17, 16, 5)
   }),
   card({
     id: "c-coffee",

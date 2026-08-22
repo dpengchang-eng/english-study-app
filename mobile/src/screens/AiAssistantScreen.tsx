@@ -37,15 +37,15 @@ export function AiAssistantScreen() {
         <Pressable onPress={() => navigation.goBack()}>
           <Text style={styles.back}>‹</Text>
         </Pressable>
+        <View style={styles.avatar}>
+          <Text style={styles.bot}>🤖</Text>
+        </View>
         <View style={styles.headMid}>
-          <View style={styles.titleRow}>
-            <Text style={styles.bot}>🤖</Text>
-            <Text style={styles.title}>AI 助手 Beta</Text>
-          </View>
+          <Text style={styles.title}>AI 助手 Beta</Text>
           <Text style={styles.sub}>直接说或输入，默认帮你自然改写</Text>
         </View>
         <Pressable onPress={() => setCal(true)} hitSlop={8}>
-          <Text style={styles.icon}>▦</Text>
+          <Text style={styles.icon}>📅</Text>
         </Pressable>
         <Pressable onPress={() => setMenu(true)} hitSlop={8}>
           <Text style={styles.icon}>⋯</Text>
@@ -59,7 +59,6 @@ export function AiAssistantScreen() {
           <View style={styles.sep}>
             <View style={styles.line} />
             <Text style={styles.sepText}>{day && day !== todayKey() ? day : "今天"}</Text>
-            <View style={styles.line} />
           </View>
         }
         renderItem={({ item }) => (
@@ -151,17 +150,17 @@ export function AiAssistantScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  head: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, paddingBottom: 8, gap: 6 },
-  back: { fontSize: 24, width: 24, color: colors.ink },
+  head: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, paddingBottom: 8, gap: 8 },
+  back: { fontSize: 24, width: 20, color: colors.ink },
+  avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.hair, alignItems: "center", justifyContent: "center" },
   headMid: { flex: 1 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  bot: { fontSize: 16 },
-  title: { fontSize: 16, fontWeight: "800", color: colors.ink },
+  bot: { fontSize: 18 },
+  title: { fontSize: 15, fontWeight: "800", color: colors.ink },
   sub: { fontSize: 11, color: colors.muted, marginTop: 2 },
   icon: { fontSize: 18, paddingHorizontal: 4, color: colors.ink },
   list: { padding: space.md, gap: 10 },
-  sep: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  line: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
+  sep: { alignItems: "center", gap: 10, marginBottom: 8 },
+  line: { alignSelf: "stretch", height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
   sepText: { color: colors.muted, fontSize: 12 },
   bubble: { borderRadius: 12, padding: 10, maxWidth: "88%" },
   user: { alignSelf: "flex-end", backgroundColor: colors.accentSoft },

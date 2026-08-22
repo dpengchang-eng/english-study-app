@@ -1,6 +1,13 @@
-import { useEffect } from "react";
-
 export type SpeechLang = "zh-CN" | "en-US";
+
+export type SpeechHandlers = {
+  onResult: (text: string, isFinal: boolean) => void;
+  onError: (message: string) => void;
+  onEnd: () => void;
+};
+
+type ResultEvent = { results?: Array<{ transcript?: string }>; isFinal?: boolean };
+type ErrorEvent = { error?: string };
 
 type SpeechModule = {
   ExpoSpeechRecognitionModule?: {
@@ -22,42 +29,46 @@ function loadSpeech(): SpeechModule {
 }
 
 const speech = loadSpeech();
+const nativeEvent = speech.useSpeechRecognitionEvent;
 
-export function useSpeechEvents(handlers: {
-  onResult: (text: string, isFinal: boolean) => void;
-  onError: (message: string) => void;
-  onEnd: () => void;
-}): void {
-  const hook = speech.useSpeechRecognitionEvent;
-  if (hook) {
-    hook("result", (event: { results?: Array<{ transcript?: string }>; isFinal?: boolean }) => {
-      const text = event.results?.[0]?.transcript?.trim() ?? "";
-      if (text) handlers.onResult(text, Boolean(event.isFinal));
-    });
-    hook("error", (event: { error?: string }) => {
-      const code = event.error ?? "unknown";
-      if (code === "not-allowed") {
-        handlers.onError("没有麦克风或语音识别权限，请改用打字。");
-      } else if (code === "no-speech") {
-        handlers.onError("没有听到声音，请再说一次，或直接打字。");
-      } else {
-        handlers.onError("语音识别不可用，请改用打字。");
-      }
-    });
-    hook("end", () => {
-      handlers.onEnd();
-    });
-    return;
-  }
-  useEffect(() => {
-    // Expo Go / web without the native module: typing still works.
-  }, []);
+function errorMessage(code: string): string {
+  if (code === "not-allowed") return "没有麦克风或语音识别权限，请改用打字。";
+  if (code === "no-speech") return "没有听到声音，请再说一次，或直接打字。";
+  return "语音识别不可用，请改用打字。";
+}
+
+function useNativeSpeechEvents(handlers: SpeechHandlers): void {
+  const subscribe = nativeEvent as NonNullable<SpeechModule["useSpeechRecognitionEvent"]>;
+  subscribe("result", ((event: ResultEvent) => {
+    const text = event.results?.[0]?.transcript?.trim() ?? "";
+    if (text) handlers.onResult(text, Boolean(event.isFinal));
+  }) as (payload: never) => void);
+  subscribe("error", ((event: ErrorEvent) => {
+    handlers.onError(errorMessage(event.error ?? "unknown"));
+  }) as (payload: never) => void);
+  subscribe("end", (() => {
+    handlers.onEnd();
+  }) as (payload: never) => void);
+}
+
+function useNoSpeechEvents(_handlers: SpeechHandlers): void {
+  // Expo Go without the native module. Typing is the fallback.
+}
+
+/**
+ * Chosen once at module load, so the hook call order never changes between renders.
+ */
+export const useSpeechEvents: (handlers: SpeechHandlers) => void = nativeEvent
+  ? useNativeSpeechEvents
+  : useNoSpeechEvents;
+
+export function isSpeechAvailable(): boolean {
+  return Boolean(speech.ExpoSpeechRecognitionModule?.isRecognitionAvailable?.());
 }
 
 export async function startListening(lang: SpeechLang): Promise<void> {
   const mod = speech.ExpoSpeechRecognitionModule;
-  const available = Boolean(mod?.isRecognitionAvailable?.());
-  if (!available || !mod?.start) {
+  if (!isSpeechAvailable() || !mod?.start) {
     throw new Error("这台设备没有语音识别。请直接打字。");
   }
   const permission = await mod.requestPermissionsAsync?.();

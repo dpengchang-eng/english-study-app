@@ -35,10 +35,11 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.ink,
+    backgroundColor: "#3B82F6",
     color: "#fff",
     textAlign: "center",
     fontSize: 12,
+    fontWeight: "700",
     lineHeight: 18,
     overflow: "hidden"
   },

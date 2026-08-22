@@ -8,7 +8,7 @@ import { PracticeToolbar } from "../components/PracticeToolbar";
 import { RewriteBlock, type MenuTarget } from "../components/RewriteBlock";
 import { SelectChoices } from "../components/SelectChoices";
 import { Toast } from "../components/Toast";
-import { WordMenu } from "../components/WordMenu";
+import { WordMenu, menuPosition } from "../components/WordMenu";
 import { useAppState } from "../context/AppState";
 import { usePractice } from "../hooks/usePractice";
 import type { RootStackParamList } from "../navigation/types";
@@ -113,8 +113,8 @@ export function RecallSessionScreen() {
       <WordMenu
         visible={Boolean(menu)}
         kind={menu?.kind === "blank" ? "blank" : "word"}
-        top={menu ? Math.max(80, menu.y - 140) : 0}
-        left={menu ? Math.min(220, Math.max(12, menu.x - 80)) : 0}
+        top={menu ? menuPosition(menu.x, menu.y).top : 0}
+        left={menu ? menuPosition(menu.x, menu.y).left : 0}
         onLookup={() => {
           if (!menu) return;
           setLookup(menu.kind === "word" ? menu.word : menu.blank.answer);

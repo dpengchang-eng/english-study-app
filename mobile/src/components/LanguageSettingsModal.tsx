@@ -49,7 +49,9 @@ export function LanguageSettingsModal({
             style={styles.checkRow}
             onPress={() => setDraft((prev) => ({ ...prev, multilingualStt: !prev.multilingualStt }))}
           >
-            <View style={styles.check}>{draft.multilingualStt ? <Text style={styles.tick}>✓</Text> : null}</View>
+            <View style={[styles.check, draft.multilingualStt && styles.checkOn]}>
+              {draft.multilingualStt ? <Text style={styles.tick}>✓</Text> : null}
+            </View>
             <Text style={styles.checkText}>多语言识别</Text>
           </Pressable>
           <View style={styles.actions}>
@@ -99,12 +101,13 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderWidth: 1,
-    borderColor: colors.ink,
+    borderColor: colors.dim,
     borderRadius: 3,
     alignItems: "center",
     justifyContent: "center"
   },
-  tick: { fontSize: 12, fontWeight: "800" },
+  checkOn: { backgroundColor: "#2563EB", borderColor: "#2563EB" },
+  tick: { fontSize: 12, fontWeight: "800", color: "#fff" },
   checkText: { fontSize: 14, color: colors.ink },
   actions: { flexDirection: "row", gap: 10, marginTop: 8 },
   cancel: { flex: 1, borderWidth: 1, borderColor: colors.ink, borderRadius: 8, paddingVertical: 10, alignItems: "center" },

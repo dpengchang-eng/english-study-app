@@ -23,6 +23,7 @@ export function HomeFeedScreen() {
   const [selected, setSelected] = useState<string[]>([]);
   const [overflowId, setOverflowId] = useState<string | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [moveTargets, setMoveTargets] = useState<string[]>([]);
   const [mystery, setMystery] = useState(false);
 
   const visible = useMemo(() => {
@@ -58,14 +59,19 @@ export function HomeFeedScreen() {
             <Text style={styles.icon}>🤖</Text>
           </Pressable>
           <Pressable onPress={() => navigation.navigate("Search", { collectionId })} hitSlop={8}>
-            <Text style={styles.icon}>⌕</Text>
+            <Text style={styles.icon}>🔍</Text>
           </Pressable>
         </View>
       </View>
       {selecting ? (
         <View style={styles.selectBar}>
           <Text style={styles.selectN}>已选 {selected.length}</Text>
-          <Pressable onPress={() => setMoveOpen(true)}>
+          <Pressable
+            onPress={() => {
+              setMoveTargets(selected);
+              setMoveOpen(true);
+            }}
+          >
             <Text style={styles.link}>移动到</Text>
           </Pressable>
           <Pressable
@@ -182,6 +188,8 @@ export function HomeFeedScreen() {
             <Pressable
               style={styles.sheetItem}
               onPress={() => {
+                setMoveTargets(overflowId ? [overflowId] : []);
+                setOverflowId(null);
                 setMoveOpen(true);
               }}
             >
@@ -207,10 +215,9 @@ export function HomeFeedScreen() {
                 key={collection.id}
                 style={styles.sheetItem}
                 onPress={() => {
-                  const ids = overflowId ? [overflowId] : selected;
-                  moveCards(ids, collection.id || UNCATEGORIZED_ID);
+                  moveCards(moveTargets, collection.id || UNCATEGORIZED_ID);
                   setMoveOpen(false);
-                  setOverflowId(null);
+                  setMoveTargets([]);
                   setSelecting(false);
                   setSelected([]);
                 }}

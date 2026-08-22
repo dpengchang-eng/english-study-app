@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import * as Clipboard from "expo-clipboard";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { CopyIcon } from "./CopyIcon";
 import { blanksForSentence, tokenize } from "../services/cloze";
 import { speakEnglish } from "../services/tts";
 import { colors } from "../theme";
@@ -74,7 +75,7 @@ export function RewriteBlock({
           void Clipboard.setStringAsync(sentences.map((sentence) => sentence.text).join("\n")).then(() => setCopied(true));
         }}
       >
-        <Text style={styles.copyText}>{copied ? "已复制" : "⧉"}</Text>
+        {copied ? <Text style={styles.copyText}>已复制</Text> : <CopyIcon />}
       </Pressable>
     </View>
   );
@@ -140,9 +141,8 @@ function SentenceLine({
       );
     } else {
       nodes.push(
-        <Text
+        <Pressable
           key={`${sentence.id}-w${index}`}
-          style={styles.word}
           onLongPress={(event) => {
             onMenu({
               kind: "word",
@@ -156,8 +156,10 @@ function SentenceLine({
           }}
           onPress={hideMenu}
         >
-          {token.surface}
-        </Text>
+          <Text style={styles.word} selectable={false} suppressHighlighting>
+            {token.surface}
+          </Text>
+        </Pressable>
       );
     }
     cursor = token.end;
@@ -217,10 +219,10 @@ function BlankView({
             autoCorrect={false}
             editable={!solved}
           />
-          <Pressable onPress={() => onCheck(blank.id)} hitSlop={6} style={styles.check}>
-            <Text style={styles.checkText}>✓</Text>
-          </Pressable>
         </View>
+        <Pressable onPress={() => onCheck(blank.id)} hitSlop={8} style={styles.check}>
+          <Text style={styles.checkText}>✓</Text>
+        </Pressable>
       </View>
     );
   }
@@ -230,7 +232,7 @@ function BlankView({
   }
 
   return (
-    <Text
+    <Pressable
       onPress={() => onActivateBlank?.(blank.id)}
       onLongPress={(event) => {
         onMenu({
@@ -240,10 +242,12 @@ function BlankView({
           y: event.nativeEvent.pageY
         });
       }}
-      style={[styles.yellow, active && styles.yellowActive]}
+      style={[styles.yellow, mode === "select" && active && styles.yellowActive]}
     >
-      {"        "}
-    </Text>
+      <Text style={styles.yellowFill} selectable={false} suppressHighlighting>
+        {"        "}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -257,20 +261,18 @@ const styles = StyleSheet.create({
   playText: { color: colors.dim, fontSize: 12 },
   copy: { alignSelf: "flex-end" },
   copyText: { color: colors.muted, fontSize: 14 },
-  inline: { transform: [{ translateY: 4 }] },
+  inline: { flexDirection: "row", alignItems: "center", gap: 4, transform: [{ translateY: 4 }] },
   inputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: colors.blank,
-    borderRadius: 6,
-    minWidth: 72,
-    paddingHorizontal: 4,
-    height: 26
+    borderRadius: 4,
+    width: 84,
+    height: 24,
+    justifyContent: "center"
   },
   inputWrong: { backgroundColor: colors.blankWrong },
   inputGood: { backgroundColor: colors.goodFill },
   input: {
-    minWidth: 48,
+    width: "100%",
     paddingVertical: 0,
     paddingHorizontal: 4,
     fontSize: 16,
@@ -278,17 +280,17 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline"
   },
   goodText: { color: colors.good, textDecorationLine: "none", fontWeight: "700" },
-  check: { paddingHorizontal: 4 },
-  checkText: { color: "#2B6CB0", fontWeight: "800" },
+  check: { paddingHorizontal: 2 },
+  checkText: { color: colors.dim, fontSize: 13, fontWeight: "700" },
   yellow: {
     backgroundColor: colors.blank,
     borderRadius: 4,
     overflow: "hidden",
-    fontSize: 16,
-    lineHeight: 22,
-    borderWidth: 1,
-    borderColor: "#D4C04A"
+    justifyContent: "center",
+    height: 22,
+    alignSelf: "center"
   },
+  yellowFill: { fontSize: 16, lineHeight: 22, color: "transparent" },
   yellowActive: { borderWidth: 2, borderColor: colors.ink },
   greenWord: {
     backgroundColor: colors.goodFill,

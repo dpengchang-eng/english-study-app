@@ -4,12 +4,13 @@ import * as Clipboard from "expo-clipboard";
 import { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CopyIcon } from "../components/CopyIcon";
 import { LookupSheet } from "../components/LookupSheet";
 import { PracticeToolbar } from "../components/PracticeToolbar";
 import { RewriteBlock, type MenuTarget } from "../components/RewriteBlock";
 import { SelectChoices } from "../components/SelectChoices";
 import { Toast } from "../components/Toast";
-import { WordMenu } from "../components/WordMenu";
+import { WordMenu, menuPosition } from "../components/WordMenu";
 import { useAppState } from "../context/AppState";
 import { usePractice } from "../hooks/usePractice";
 import type { RootStackParamList } from "../navigation/types";
@@ -98,8 +99,8 @@ export function CardDetailScreen() {
             {replyOpen ? (
               <View style={styles.reply}>
                 <Text style={styles.replyText}>{card.reply}</Text>
-                <Pressable onPress={() => void Clipboard.setStringAsync(card.reply)}>
-                  <Text style={styles.copy}>⧉</Text>
+                <Pressable onPress={() => void Clipboard.setStringAsync(card.reply)} hitSlop={8}>
+                  <CopyIcon />
                 </Pressable>
               </View>
             ) : null}
@@ -152,8 +153,8 @@ export function CardDetailScreen() {
       <WordMenu
         visible={Boolean(menu)}
         kind={menu?.kind === "blank" ? "blank" : "word"}
-        top={menu ? Math.max(80, menu.y - 140) : 0}
-        left={menu ? Math.min(220, Math.max(12, menu.x - 80)) : 0}
+        top={menu ? menuPosition(menu.x, menu.y).top : 0}
+        left={menu ? menuPosition(menu.x, menu.y).left : 0}
         onLookup={() => {
           if (!menu) return;
           setLookup(menu.kind === "word" ? menu.word : menu.blank.answer);
@@ -190,7 +191,6 @@ const styles = StyleSheet.create({
   muted: { color: colors.muted },
   reply: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   replyText: { flex: 1, fontSize: 15, lineHeight: 22, color: colors.ink },
-  copy: { color: colors.muted, fontSize: 14 },
   related: { gap: 8, marginTop: 8 },
   relatedItem: { fontSize: 14, color: colors.ink, paddingVertical: 6 },
   missing: { padding: space.md, color: colors.muted },

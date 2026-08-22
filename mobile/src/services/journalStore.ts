@@ -10,7 +10,7 @@ import type {
   SortOrder
 } from "../types";
 
-const KEY = "didao-journal-v2";
+const KEY = "didao-journal-v3";
 
 export type PersistedJournal = {
   cards: JournalCard[];

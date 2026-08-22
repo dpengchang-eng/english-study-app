@@ -21,8 +21,10 @@ export function FeedCard({
       <Text style={styles.title} numberOfLines={1}>
         {card.title}
       </Text>
-      <Text style={styles.preview} numberOfLines={2}>
-        {card.rewrite || card.body}
+      <Text style={styles.preview} numberOfLines={3}>
+        {card.sentences.length > 0
+          ? card.sentences.map((sentence) => sentence.text).join(" ")
+          : card.rewrite.replace(/\n+/g, " ") || card.body}
       </Text>
       <View style={styles.meta}>
         <Text style={styles.stamp}>{formatFeedStamp(card.createdAt)}</Text>

@@ -37,7 +37,7 @@ npm run smoke:web
 - **Home feed** — hamburger, `生活集 ▾` (选择卡片 / 排序方式), robot, search. Chips: 回顾今天 / 回顾昨天 / 记忆盲盒. Cards with title, English preview, date · time, ··· (移动到 / 删除). FAB +.
 - **Drawer** — demo user `OIO-377YEQ` + PRO + gear. 卡片 / 记录天数 + Jun–Aug heatmap. AI 助手 Beta. 回忆. 收藏夹 (empty). 生活集 + → 新建生活集.
 - **新增卡片** — 生活集, 标题（可选）, 记录此刻想说的事……, camera/gallery/mic, 0/5000, 完成. Three radios; middle 目标语言 is default. Official radio copy was truncated on device.
-- **Card detail** — 目标语言改写, collapsible 回复, 相关记录, left audio handle, practice toolbar. Long-press word: 查词 | 挖空. Long-press blank: 查词 | 删除填空.
+- **Card detail** — 目标语言改写, collapsible 回复, 相关记录, left audio handle, practice toolbar. Tap or long-press a word: 查词 | 挖空. Long-press a blank: 查词 | 删除填空.
 - **填** — dark pill, inline input + ✓, underlined text, wrong answer turns pink.
 - **选** — needs ≥2 distinct blanks. One blank toasts `至少需要两个不同的填空，已切换到键盘填空` and falls back to 填. Two+ blanks: dark 选 pill, two gray answer chips above the toolbar, active blank outline, correct chip fills green.
 - **回忆** — 继续上次, 今天/昨天 (没有 Card when empty), 选择日期 → 记录日历, 关键词搜索, 记忆盲盒.

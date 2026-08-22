@@ -230,12 +230,12 @@ async function main() {
   assert.equal(await blankCount(), 0, "second card should start with no blanks");
   await shot("03-card-detail");
 
-  // --- 挖空 via long press (image 3) ---
+  // --- 挖空 via tap (web) / long-press still works on device ---
   const cheaper = await centerOfLeaf("cheaper");
   assert.ok(cheaper, "could not locate the word cheaper");
-  await longPress(cheaper);
+  await tap(cheaper);
   detail = await text();
-  assert.ok(detail.includes("查词"), "long press did not open the word menu (查词)");
+  assert.ok(detail.includes("查词"), "tap did not open the word menu (查词)");
   assert.ok(detail.includes("挖空"), "word menu missing 挖空");
   assert.ok(!detail.includes("查询"), "menu must say 查词, never 查询");
   await shot("04-longpress-menu");
@@ -271,7 +271,7 @@ async function main() {
   // --- Second blank, then 选 shows two plain chips (image 8) ---
   const tough = await centerOfLeaf("Tough");
   assert.ok(tough, "could not locate the word Tough");
-  await longPress(tough);
+  await tap(tough);
   await tapExact("挖空", "cloze the second word");
   await tapExact("选", "select mode with two blanks");
   detail = await text();

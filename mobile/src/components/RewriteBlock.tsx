@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import * as Clipboard from "expo-clipboard";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { CopyIcon } from "./CopyIcon";
 import { blanksForSentence, tokenize } from "../services/cloze";
 import { speakEnglish } from "../services/tts";
@@ -72,6 +72,7 @@ export function RewriteBlock({
       <Pressable
         style={styles.copy}
         onPress={() => {
+          hideMenu();
           void Clipboard.setStringAsync(sentences.map((sentence) => sentence.text).join("\n")).then(() => setCopied(true));
         }}
       >
@@ -140,21 +141,23 @@ function SentenceLine({
         </Text>
       );
     } else {
+      const openWordMenu = (event: GestureResponderEvent) => {
+        onMenu({
+          kind: "word",
+          sentenceId: sentence.id,
+          start: token.start,
+          end: token.end,
+          word: token.surface,
+          x: event.nativeEvent.pageX,
+          y: event.nativeEvent.pageY
+        });
+      };
       nodes.push(
         <Pressable
           key={`${sentence.id}-w${index}`}
-          onLongPress={(event) => {
-            onMenu({
-              kind: "word",
-              sentenceId: sentence.id,
-              start: token.start,
-              end: token.end,
-              word: token.surface,
-              x: event.nativeEvent.pageX,
-              y: event.nativeEvent.pageY
-            });
-          }}
-          onPress={hideMenu}
+          onPress={openWordMenu}
+          onLongPress={openWordMenu}
+          delayLongPress={350}
         >
           <Text style={styles.word} selectable={false} suppressHighlighting>
             {token.surface}
@@ -174,7 +177,14 @@ function SentenceLine({
   return (
     <View style={styles.line}>
       <View style={styles.lineText}>{nodes}</View>
-      <Pressable onPress={() => speakEnglish(sentence.text)} hitSlop={8} style={styles.play}>
+      <Pressable
+        onPress={() => {
+          hideMenu();
+          speakEnglish(sentence.text);
+        }}
+        hitSlop={8}
+        style={styles.play}
+      >
         <Text style={styles.playText}>▶</Text>
       </Pressable>
     </View>
@@ -233,7 +243,20 @@ function BlankView({
 
   return (
     <Pressable
-      onPress={() => onActivateBlank?.(blank.id)}
+      onPress={(event) => {
+        if (mode === "select") {
+          onActivateBlank?.(blank.id);
+          return;
+        }
+        if (Platform.OS === "web") {
+          onMenu({
+            kind: "blank",
+            blank,
+            x: event.nativeEvent.pageX,
+            y: event.nativeEvent.pageY
+          });
+        }
+      }}
       onLongPress={(event) => {
         onMenu({
           kind: "blank",
@@ -242,6 +265,7 @@ function BlankView({
           y: event.nativeEvent.pageY
         });
       }}
+      delayLongPress={350}
       style={[styles.yellow, mode === "select" && active && styles.yellowActive]}
     >
       <Text style={styles.yellowFill} selectable={false} suppressHighlighting>

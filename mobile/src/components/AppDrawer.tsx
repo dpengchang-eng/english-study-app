@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../context/AppState";
 import { colors, space } from "../theme";
+import { BotIcon } from "./BotIcon";
 import { DrawerHeatmap } from "./Heatmap";
 
 export function AppDrawer({
@@ -66,7 +67,7 @@ export function AppDrawer({
             <View style={styles.rule} />
             <DrawerHeatmap dayCounts={dayCounts} year={year} months={recentMonths} />
             <Pressable style={styles.item} onPress={onAi}>
-              <Text style={styles.itemIcon}>🤖</Text>
+              <BotIcon />
               <Text style={styles.itemText}>AI 助手 Beta</Text>
             </Pressable>
             <Pressable style={styles.item} onPress={onMemories}>

@@ -3,6 +3,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BotIcon } from "../components/BotIcon";
 import { useAppState } from "../context/AppState";
 import type { RootStackParamList } from "../navigation/types";
 import { startListening, stopListening, useSpeechEvents } from "../services/stt";
@@ -38,7 +39,7 @@ export function AiAssistantScreen() {
           <Text style={styles.back}>‹</Text>
         </Pressable>
         <View style={styles.avatar}>
-          <Text style={styles.bot}>🤖</Text>
+          <BotIcon />
         </View>
         <View style={styles.headMid}>
           <Text style={styles.title}>AI 助手 Beta</Text>
@@ -154,7 +155,6 @@ const styles = StyleSheet.create({
   back: { fontSize: 24, width: 20, color: colors.ink },
   avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.hair, alignItems: "center", justifyContent: "center" },
   headMid: { flex: 1 },
-  bot: { fontSize: 18 },
   title: { fontSize: 15, fontWeight: "800", color: colors.ink },
   sub: { fontSize: 11, color: colors.muted, marginTop: 2 },
   icon: { fontSize: 18, paddingHorizontal: 4, color: colors.ink },

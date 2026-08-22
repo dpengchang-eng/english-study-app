@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppDrawer } from "../components/AppDrawer";
+import { BotIcon } from "../components/BotIcon";
 import { FeedCard } from "../components/FeedCard";
 import { MysteryBoxModal } from "../components/MysteryBoxModal";
 import { useAppState } from "../context/AppState";
@@ -55,8 +56,13 @@ export function HomeFeedScreen() {
           <Text style={styles.chev}>▾</Text>
         </Pressable>
         <View style={styles.right}>
-          <Pressable onPress={() => navigation.navigate("AiAssistant")} hitSlop={8}>
-            <Text style={styles.icon}>🤖</Text>
+          <Pressable
+            onPress={() => navigation.navigate("AiAssistant")}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="AI 助手"
+          >
+            <BotIcon />
           </Pressable>
           <Pressable onPress={() => navigation.navigate("Search", { collectionId })} hitSlop={8}>
             <Text style={styles.icon}>🔍</Text>

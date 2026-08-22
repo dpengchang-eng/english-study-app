@@ -2,13 +2,40 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
 import { useRef, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CameraIcon } from "../components/CameraIcon";
+import { ImageIcon } from "../components/ImageIcon";
+import { MicIcon } from "../components/MicIcon";
+import { Toast } from "../components/Toast";
 import { useAppState } from "../context/AppState";
 import type { RootStackParamList } from "../navigation/types";
+import { rewriteJournal } from "../services/rewrite";
 import { startListening, stopListening, useSpeechEvents } from "../services/stt";
 import { INPUT_CHAR_CAP, RECORD_MAX_MS, UNCATEGORIZED_ID, type RewriteRadio, type SourceType } from "../types";
 import { colors, space } from "../theme";
+
+const RADIO_HINT: Record<RewriteRadio, string> = {
+  0: "完成时只保留原文",
+  1: "完成时改写成目标语言",
+  2: "完成时改写并加上回复"
+};
+
+function pickWebImage(camera: boolean): Promise<string | null> {
+  if (typeof document === "undefined") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    if (camera) input.setAttribute("capture", "environment");
+    input.onchange = () => {
+      const file = input.files?.[0];
+      resolve(file ? URL.createObjectURL(file) : null);
+    };
+    input.addEventListener("cancel", () => resolve(null));
+    input.click();
+  });
+}
 
 export function CreateCardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -23,20 +50,47 @@ export function CreateCardScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [holding, setHolding] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const sourceTypeRef = useRef<SourceType>("text");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showHint = (text: string): void => {
+    setHint(text);
+    setTimeout(() => setHint((current) => (current === text ? null : current)), 2600);
+  };
 
   useSpeechEvents({
     onResult: (text) => {
       sourceTypeRef.current = "voice";
       setBody(text.slice(0, INPUT_CHAR_CAP));
     },
-    onError: () => setHolding(false),
+    onError: (message) => {
+      setHolding(false);
+      showHint(message);
+    },
     onEnd: () => setHolding(false)
   });
 
-  const pickImage = async (from: "camera" | "gallery"): Promise<void> => {
+  const addPhoto = async (from: "camera" | "gallery"): Promise<void> => {
     try {
+      if (Platform.OS === "web") {
+        const uri = await pickWebImage(from === "camera");
+        if (uri) setImages((prev) => [...prev, uri]);
+        return;
+      }
+      if (from === "camera") {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          showHint("没有相机权限，请用相册或打字。");
+          return;
+        }
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          showHint("没有相册权限，请打字。");
+          return;
+        }
+      }
       const result =
         from === "camera"
           ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.7 })
@@ -45,8 +99,29 @@ export function CreateCardScreen() {
         setImages((prev) => [...prev, result.assets[0]!.uri]);
       }
     } catch {
-      // Expo Go / missing permission — typing still works
+      showHint(from === "camera" ? "这台设备打不开相机，请用相册或打字。" : "这台设备打不开相册，请打字。");
     }
+  };
+
+  const startMic = async (): Promise<void> => {
+    setHolding(true);
+    try {
+      await startListening("zh-CN");
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        stopListening();
+        setHolding(false);
+      }, RECORD_MAX_MS);
+    } catch (error) {
+      setHolding(false);
+      showHint(error instanceof Error ? error.message : "语音识别不可用，请改用打字。");
+    }
+  };
+
+  const stopMic = (): void => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    stopListening();
+    setHolding(false);
   };
 
   const finish = async (): Promise<void> => {
@@ -55,7 +130,17 @@ export function CreateCardScreen() {
     setBusy(true);
     try {
       if (existing) {
-        updateCard(existing.id, { collectionId, title, body: text, images, rewriteRadio: radio });
+        const rewritten = await rewriteJournal(text, radio);
+        updateCard(existing.id, {
+          collectionId,
+          title,
+          body: text,
+          images,
+          rewriteRadio: radio,
+          rewrite: rewritten.rewrite,
+          sentences: rewritten.sentences,
+          reply: rewritten.reply
+        });
         navigation.goBack();
         return;
       }
@@ -116,33 +201,36 @@ export function CreateCardScreen() {
         />
         <View style={styles.thumbs}>
           {images.map((uri) => (
-            <Image key={uri} source={{ uri }} style={styles.thumb} />
+            <Pressable key={uri} onPress={() => setImages((prev) => prev.filter((item) => item !== uri))}>
+              <Image source={{ uri }} style={styles.thumb} />
+            </Pressable>
           ))}
         </View>
         <View style={styles.tools}>
-          <Pressable onPress={() => void pickImage("camera")}>
-            <Text style={styles.tool}>📷</Text>
+          <Pressable onPress={() => void addPhoto("camera")} hitSlop={8} accessibilityRole="button" accessibilityLabel="相机">
+            <CameraIcon />
           </Pressable>
-          <Pressable onPress={() => void pickImage("gallery")}>
-            <Text style={styles.tool}>🖼</Text>
+          <Pressable onPress={() => void addPhoto("gallery")} hitSlop={8} accessibilityRole="button" accessibilityLabel="相册">
+            <ImageIcon />
           </Pressable>
           <Pressable
+            onPress={() => {
+              if (Platform.OS === "web") {
+                if (holding) stopMic();
+                else void startMic();
+              }
+            }}
             onPressIn={() => {
-              setHolding(true);
-              void startListening("zh-CN").catch(() => setHolding(false));
-              if (timerRef.current) clearTimeout(timerRef.current);
-              timerRef.current = setTimeout(() => {
-                stopListening();
-                setHolding(false);
-              }, RECORD_MAX_MS);
+              if (Platform.OS !== "web") void startMic();
             }}
             onPressOut={() => {
-              if (timerRef.current) clearTimeout(timerRef.current);
-              stopListening();
-              setHolding(false);
+              if (Platform.OS !== "web") stopMic();
             }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="语音"
           >
-            <Text style={styles.tool}>{holding ? "●" : "🎤"}</Text>
+            <MicIcon color={holding ? colors.warn : colors.ink} />
           </Pressable>
           <Text style={styles.counter}>
             {body.length}/{INPUT_CHAR_CAP}
@@ -150,13 +238,21 @@ export function CreateCardScreen() {
         </View>
         <View style={styles.radios}>
           {([0, 1, 2] as RewriteRadio[]).map((value) => (
-            <Pressable key={value} style={styles.radio} onPress={() => setRadio(value)}>
-              <View style={[styles.dot, radio === value && styles.dotOn]} />
+            <Pressable
+              key={value}
+              style={styles.radio}
+              onPress={() => {
+                setRadio(value);
+                showHint(RADIO_HINT[value]);
+              }}
+            >
+              <View style={styles.radioOuter}>{radio === value ? <View style={styles.radioInner} /> : null}</View>
               {value === 1 ? <Text style={styles.radioHint}>目标语言</Text> : <View style={styles.radioSpacer} />}
             </Pressable>
           ))}
         </View>
       </ScrollView>
+      <Toast text={hint} />
     </SafeAreaView>
   );
 }
@@ -175,13 +271,20 @@ const styles = StyleSheet.create({
   box: { minHeight: 180, fontSize: 16, color: colors.ink, textAlignVertical: "top" },
   thumbs: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   thumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: colors.hair },
-  tools: { flexDirection: "row", alignItems: "center", gap: 14 },
-  tool: { fontSize: 20 },
+  tools: { flexDirection: "row", alignItems: "center", gap: 16 },
   counter: { marginLeft: "auto", color: colors.muted, fontSize: 12 },
   radios: { flexDirection: "row", justifyContent: "center", alignItems: "flex-start", gap: 28, paddingVertical: 12 },
   radio: { padding: 8, alignItems: "center", gap: 6 },
   radioHint: { fontSize: 11, color: colors.muted },
   radioSpacer: { height: 14 },
-  dot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: colors.ink },
-  dotOn: { backgroundColor: colors.ink }
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.6,
+    borderColor: colors.ink,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.ink }
 });

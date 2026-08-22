@@ -19,7 +19,17 @@ npx expo start
 Scan the QR code with Expo Go. No secrets are required. The loop uses a stable local mock rewrite. Gemini stays optional behind `EXPO_PUBLIC_USE_GEMINI=1` (Firebase AI Logic already in this folder).
 
 ```bash
-npx tsc --noEmit
+npm run typecheck
+npm run check:loop
+```
+
+`check:loop` compiles the pure logic modules and asserts the practice rules and the
+Chinese copy. To also drive the built UI, start the web build and run the smoke test,
+which walks 挖空 → 填 → 选 and writes screenshots to `/tmp/didao-shots`:
+
+```bash
+npx expo start --web --port 8081
+npm run smoke:web
 ```
 
 ## Screens
@@ -37,3 +47,7 @@ npx tsc --noEmit
 ## Expo Go
 
 Uses `expo-speech` and `expo-image-picker` only. `expo-speech-recognition` was already in this folder; this work does not add another native STT module. Mic falls back to typing if recognition is unavailable.
+
+`react-native-web` is a dev-only extra so `npx expo start --web` works for the smoke test. It does not affect Expo Go.
+
+Words and blanks are `Pressable`, not `Text` with `onLongPress`: `react-native-web` has no `onLongPress` on `Text`, so 挖空 would be unreachable on web.

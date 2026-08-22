@@ -34,7 +34,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "check:loop": "node scripts/check-core-loop.mjs"
+    "check:loop": "node scripts/check-core-loop.mjs",
+    "smoke:web": "node scripts/web-smoke.mjs"
   },
   "private": true
 }

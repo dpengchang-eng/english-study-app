@@ -63,6 +63,10 @@ async function evaluate(expression) {
 
 const text = () => evaluate("document.body.innerText");
 
+/** Placeholders are DOM attributes, so innerText never contains them. */
+const placeholders = () =>
+  evaluate("[...document.querySelectorAll('input,textarea')].map((el) => el.placeholder || '')");
+
 /** Center of the first element whose trimmed text is exactly `label`. */
 async function centerOfExact(label) {
   return evaluate(`(() => {
@@ -283,6 +287,52 @@ async function main() {
   const green = await greenWords();
   assert.ok(green.includes("cheaper"), `correct pick should fill green. Green words: ${JSON.stringify(green)}`);
   await shot("09-select-green");
+
+  // --- 回忆 hub (image 15) ---
+  await tapExact("‹", "back to the feed");
+  await tapExact("☰", "hamburger");
+  await tapExact("回忆", "memories");
+  let memories = await text();
+  for (const needle of ["回忆", "今天", "昨天", "选择日期", "关键词搜索", "记忆盲盒"]) {
+    assert.ok(memories.includes(needle), `回忆 missing ${needle}`);
+  }
+  assert.ok(memories.includes("没有 Card"), "empty 今天/昨天 tiles must read 没有 Card");
+  await shot("10-memories");
+
+  // --- 记录日历 (image 10) ---
+  await tapExact("选择日期", "open the record calendar");
+  const calendar = await text();
+  for (const needle of ["记录日历", "月", "年", "张卡片", "字", "本月记录"]) {
+    assert.ok(calendar.includes(needle), `记录日历 missing ${needle}`);
+  }
+  assert.ok(!calendar.includes("累计记录"), "calendar must say 本月记录");
+  assert.ok(/\d{4}/.test(calendar), "calendar should show a month title with a year");
+  await shot("11-record-calendar");
+
+  // --- 关键词搜索 dialog (image 11) ---
+  await tapExact("✕", "close the calendar");
+  await tapExact("关键词搜索", "open the keyword dialog");
+  const dialog = await text();
+  assert.ok(dialog.includes("关键词搜索"), "keyword dialog missing its title");
+  assert.ok(
+    (await placeholders()).includes("输入关键词"),
+    `keyword dialog missing its 输入关键词 field. Saw: ${JSON.stringify(await placeholders())}`
+  );
+  await shot("12-keyword-dialog");
+
+  // --- 新建生活集 (image 12) ---
+  await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", windowsVirtualKeyCode: 27 });
+  await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", windowsVirtualKeyCode: 27 });
+  await sleep(500);
+  await tapExact("‹", "back to the feed");
+  await tapExact("☰", "hamburger");
+  await tapExact("+", "new collection");
+  const collection = await text();
+  for (const needle of ["取消", "新建生活集", "确定"]) {
+    assert.ok(collection.includes(needle), `新建生活集 missing ${needle}`);
+  }
+  assert.ok((await placeholders()).includes("生活集名称"), "新建生活集 missing its 生活集名称 field");
+  await shot("13-new-collection");
 
   console.log("web smoke ok — screenshots in", SHOTS);
 }

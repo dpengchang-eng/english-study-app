@@ -13,6 +13,14 @@ const KNOWN: Record<string, { rewrite: string; reply: string }> = {
     rewrite: "Hey, where are you going today?",
     reply: "Hey 比 Hello 更口语。where are you going today 很常用。"
   },
+  "大家好，我今天真的非常高兴！": {
+    rewrite: "Hey everyone, I'm really so happy today!",
+    reply: "Hey everyone 和 so happy 都很口语。"
+  },
+  "大家好我今天真的非常高兴": {
+    rewrite: "Hey everyone, I'm really so happy today!",
+    reply: "Hey everyone 和 so happy 都很口语。"
+  },
   "今天事情好多，我就先检查一下语言功能好不好用。怎么开始比较好？哦，真不错。这个功能挺好的，我每天都能推进自己的学习，再看看有意思的新闻。太感谢了。把这个苹果给我，我天天卖。": {
     rewrite:
       "Hey, today I've got a ton of stuff to do, so I'm just checking one thing.\nHow can I get started the best way?\nOh, it's awesome.\nThis feature is really great, so now I can drive my journey every day and learn some interesting news.\nThank you so much.\nGive me this apple and I'll sell it every day.",
@@ -24,6 +32,10 @@ const KNOWN: Record<string, { rewrite: string; reply: string }> = {
 const CHUNKS: Array<[string, string]> = [
   ["今天去哪里", "where are you going today"],
   ["今天去哪儿", "where are you going today"],
+  ["我今天真的非常高兴", "I'm really so happy today"],
+  ["真的非常高兴", "really so happy"],
+  ["非常高兴", "so happy"],
+  ["大家好", "hey everyone"],
   ["今天事情好多", "I've got a ton of stuff to do today"],
   ["怎么开始比较好", "what's the best way to get started"],
   ["太感谢了", "thank you so much"],

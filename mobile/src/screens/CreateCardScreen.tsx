@@ -1,7 +1,7 @@
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraIcon } from "../components/CameraIcon";
@@ -10,6 +10,7 @@ import { MicIcon } from "../components/MicIcon";
 import { Toast } from "../components/Toast";
 import { useAppState } from "../context/AppState";
 import type { RootStackParamList } from "../navigation/types";
+import { mockRewrite } from "../services/mockRewrite";
 import { rewriteJournal } from "../services/rewrite";
 import { startListening, stopListening, useSpeechEvents } from "../services/stt";
 import { INPUT_CHAR_CAP, RECORD_MAX_MS, UNCATEGORIZED_ID, type RewriteRadio, type SourceType } from "../types";
@@ -57,6 +58,8 @@ export function CreateCardScreen() {
   const [busy, setBusy] = useState(false);
   const [holding, setHolding] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
+  const [showing, setShowing] = useState<"original" | "target">("original");
+  const preview = useMemo(() => (body.trim() ? mockRewrite(body).rewrite : ""), [body]);
   const sourceTypeRef = useRef<SourceType>("text");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -194,17 +197,45 @@ export function CreateCardScreen() {
           placeholderTextColor={colors.muted}
           style={styles.title}
         />
-        <TextInput
-          value={body}
-          onChangeText={(value) => {
-            sourceTypeRef.current = "text";
-            setBody(value.slice(0, INPUT_CHAR_CAP));
-          }}
-          placeholder="记录此刻想说的事……"
-          placeholderTextColor={colors.muted}
-          multiline
-          style={styles.box}
-        />
+        <View style={styles.switchRow}>
+          <Pressable
+            style={[styles.switchSide, showing === "original" && styles.switchOn]}
+            onPress={() => setShowing("original")}
+            accessibilityRole="button"
+            accessibilityLabel="原文"
+          >
+            <Text style={[styles.switchText, showing === "original" && styles.switchTextOn]}>原文</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.switchSide, showing === "target" && styles.switchOn]}
+            onPress={() => {
+              if (!body.trim()) {
+                showHint("先写原文，再切换看目标语言。");
+                return;
+              }
+              setShowing("target");
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="目标语言"
+          >
+            <Text style={[styles.switchText, showing === "target" && styles.switchTextOn]}>目标语言</Text>
+          </Pressable>
+        </View>
+        {showing === "original" ? (
+          <TextInput
+            value={body}
+            onChangeText={(value) => {
+              sourceTypeRef.current = "text";
+              setBody(value.slice(0, INPUT_CHAR_CAP));
+            }}
+            placeholder="记录此刻想说的事……"
+            placeholderTextColor={colors.muted}
+            multiline
+            style={styles.box}
+          />
+        ) : (
+          <Text style={[styles.box, styles.preview]}>{preview}</Text>
+        )}
         <View style={styles.thumbs}>
           {images.map((uri) => (
             <Pressable key={uri} onPress={() => setImages((prev) => prev.filter((item) => item !== uri))}>
@@ -274,13 +305,26 @@ const styles = StyleSheet.create({
   pickText: { color: colors.ink },
   option: { paddingVertical: 8, paddingHorizontal: 4 },
   title: { fontSize: 16, color: colors.ink, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line, paddingVertical: 8 },
+  switchRow: {
+    flexDirection: "row",
+    alignSelf: "center",
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    borderRadius: 20,
+    overflow: "hidden"
+  },
+  switchSide: { minWidth: 96, paddingVertical: 8, paddingHorizontal: 16, alignItems: "center" },
+  switchOn: { backgroundColor: colors.ink },
+  switchText: { fontSize: 14, fontWeight: "700", color: colors.ink },
+  switchTextOn: { color: "#fff" },
   box: { minHeight: 180, fontSize: 16, color: colors.ink, textAlignVertical: "top" },
+  preview: { color: colors.ink, lineHeight: 24 },
   thumbs: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   thumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: colors.hair },
   tools: { flexDirection: "row", alignItems: "center", gap: 16 },
   counter: { marginLeft: "auto", color: colors.muted, fontSize: 12 },
   radios: { flexDirection: "row", justifyContent: "center", alignItems: "flex-start", gap: 28, paddingVertical: 12 },
-  radio: { padding: 8, alignItems: "center", gap: 6 },
+  radio: { padding: 8, alignItems: "center", gap: 6, minWidth: 72 },
   radioHint: { fontSize: 11, color: colors.muted, textAlign: "center" },
   radioOuter: {
     width: 20,

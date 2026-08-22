@@ -88,6 +88,7 @@ try {
   assert.ok(result.rewrite.length > 0);
   assert.ok(result.sentences.length > 0);
   assert.equal(rewrite.mockRewrite("你好 今天去哪里？").rewrite, "Hey, where are you going today?");
+  assert.equal(rewrite.mockRewrite("大家好，我今天真的非常高兴！").rewrite, "Hey everyone, I'm really so happy today!");
   assert.ok(!/[\u4e00-\u9fff]/.test(rewrite.mockRewrite("你好 今天去哪里？").rewrite));
   assert.ok(!rewrite.mockRewrite("今天事情好多。").rewrite.includes("Just noting"));
   assert.equal(rewrite.applyRadio("今天事情好多。", 0).rewrite, "", "radio 0 keeps the original only");
@@ -123,6 +124,7 @@ try {
     ["screens/NewCollectionScreen.tsx", "生活集名称"],
     ["screens/SearchScreen.tsx", "搜索原文、AI 改写和学过的表达"],
     ["screens/CreateCardScreen.tsx", "记录此刻想说的事……"],
+    ["screens/CreateCardScreen.tsx", "原文"],
     ["screens/CreateCardScreen.tsx", "保留原文"],
     ["screens/CreateCardScreen.tsx", "目标语言"],
     ["screens/CreateCardScreen.tsx", "改写+回复"],

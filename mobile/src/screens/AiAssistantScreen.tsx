@@ -4,6 +4,9 @@ import { useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BotIcon } from "../components/BotIcon";
+import { CalendarIcon } from "../components/CalendarIcon";
+import { MicIcon } from "../components/MicIcon";
+import { MoreIcon } from "../components/MoreIcon";
 import { useAppState } from "../context/AppState";
 import type { RootStackParamList } from "../navigation/types";
 import { startListening, stopListening, useSpeechEvents } from "../services/stt";
@@ -45,11 +48,11 @@ export function AiAssistantScreen() {
           <Text style={styles.title}>AI 助手 Beta</Text>
           <Text style={styles.sub}>直接说或输入，默认帮你自然改写</Text>
         </View>
-        <Pressable onPress={() => setCal(true)} hitSlop={8}>
-          <Text style={styles.icon}>📅</Text>
+        <Pressable onPress={() => setCal(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="日历">
+          <CalendarIcon />
         </Pressable>
-        <Pressable onPress={() => setMenu(true)} hitSlop={8}>
-          <Text style={styles.icon}>⋯</Text>
+        <Pressable onPress={() => setMenu(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="更多">
+          <MoreIcon />
         </Pressable>
       </View>
       <FlatList
@@ -85,7 +88,7 @@ export function AiAssistantScreen() {
             }}
             onPressOut={stopListening}
           >
-            <Text style={styles.mic}>🎤</Text>
+            <MicIcon />
           </Pressable>
         </View>
         <Pressable
@@ -178,7 +181,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12
   },
   input: { flex: 1, paddingVertical: 10, color: colors.ink },
-  mic: { fontSize: 16 },
   send: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.ink, alignItems: "center", justifyContent: "center" },
   sendOff: { backgroundColor: colors.dim },
   sendText: { color: "#fff", fontSize: 18 },

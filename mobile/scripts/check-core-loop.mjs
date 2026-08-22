@@ -87,6 +87,9 @@ try {
   const result = rewrite.mockRewrite("今天事情好多。");
   assert.ok(result.rewrite.length > 0);
   assert.ok(result.sentences.length > 0);
+  assert.equal(rewrite.mockRewrite("你好 今天去哪里？").rewrite, "Hey, where are you going today?");
+  assert.ok(!/[\u4e00-\u9fff]/.test(rewrite.mockRewrite("你好 今天去哪里？").rewrite));
+  assert.ok(!rewrite.mockRewrite("今天事情好多。").rewrite.includes("Just noting"));
   assert.equal(rewrite.applyRadio("今天事情好多。", 0).rewrite, "", "radio 0 keeps the original only");
   assert.equal(rewrite.applyRadio("今天事情好多。", 1).reply, "", "radio 1 rewrites without a reply");
   assert.ok(rewrite.applyRadio("今天事情好多。", 2).reply.length > 0, "radio 2 adds a reply");

@@ -3,6 +3,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CalendarIcon } from "../components/CalendarIcon";
 import { MysteryBoxModal } from "../components/MysteryBoxModal";
 import { useAppState } from "../context/AppState";
 import type { RootStackParamList } from "../navigation/types";
@@ -51,7 +52,7 @@ export function MemoriesScreen() {
         />
       </View>
       <Pressable style={styles.row} onPress={() => navigation.navigate("RecordCalendar")}>
-        <Text style={styles.rowIcon}>📅</Text>
+        <CalendarIcon />
         <Text style={styles.rowText}>选择日期</Text>
         <Text style={styles.chev}>›</Text>
       </Pressable>

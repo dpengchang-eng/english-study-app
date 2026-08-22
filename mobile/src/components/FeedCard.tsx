@@ -32,7 +32,13 @@ export function FeedCard({
         {selecting ? (
           <Text style={styles.check}>{selected ? "●" : "○"}</Text>
         ) : (
-          <Pressable onPress={onOverflow} hitSlop={10} accessibilityRole="button" accessibilityLabel="更多">
+          <Pressable
+            onPress={onOverflow}
+            hitSlop={10}
+            style={styles.moreBtn}
+            accessibilityRole="button"
+            accessibilityLabel="更多"
+          >
             <MoreIcon />
           </Pressable>
         )}
@@ -55,5 +61,6 @@ const styles = StyleSheet.create({
   preview: { fontSize: 13, color: colors.muted, lineHeight: 20 },
   meta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   stamp: { fontSize: 12, color: colors.dim },
+  moreBtn: { paddingLeft: 8, marginRight: -4 },
   check: { color: colors.ink, fontSize: 16 }
 });

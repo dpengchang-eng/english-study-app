@@ -1,30 +1,38 @@
 import { StyleSheet, View } from "react-native";
 import { colors } from "../theme";
 
-/** Material more-horiz: three dots in a row, drawn so it never falls back to tofu. */
+/**
+ * Material more-horiz: three circular dots in a 24×24 icon box.
+ * Drawn with Views so it never falls back to tofu or leftover `···` text.
+ */
 export function MoreIcon() {
   return (
     <View style={styles.wrap}>
-      <View style={styles.dot} />
-      <View style={styles.dot} />
-      <View style={styles.dot} />
+      <View style={[styles.dot, styles.a]} />
+      <View style={[styles.dot, styles.b]} />
+      <View style={[styles.dot, styles.c]} />
     </View>
   );
 }
 
+const SIZE = 24;
+const DOT = 6;
+const TOP = (SIZE - DOT) / 2;
+
 const styles = StyleSheet.create({
   wrap: {
-    width: 18,
-    height: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 1
+    width: SIZE,
+    height: SIZE
   },
   dot: {
-    width: 3.5,
-    height: 3.5,
-    borderRadius: 2,
-    backgroundColor: colors.muted
-  }
+    position: "absolute",
+    top: TOP,
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+    backgroundColor: colors.ink
+  },
+  a: { left: 1 },
+  b: { left: 9 },
+  c: { left: 17 }
 });

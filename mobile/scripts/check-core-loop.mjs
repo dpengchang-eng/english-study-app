@@ -37,6 +37,11 @@ const two = [
 assert.equal(canUseSelect(one), false);
 assert.equal(canUseSelect(two), true);
 assert.deepEqual(optionPair(two), ["awesome", "apple"]);
+assert.equal(optionPair(one), null);
 assert.equal(gradeFill("Awesome", "awesome"), true);
 assert.equal(gradeFill("apple", "awesome"), false);
+
+const SELECT_TOAST = "至少需要两个不同的填空，已切换到键盘填空";
+assert.equal(canUseSelect(one) ? "select" : "fill", "fill");
+assert.match(SELECT_TOAST, /至少需要两个不同的填空/);
 console.log("core loop checks ok");

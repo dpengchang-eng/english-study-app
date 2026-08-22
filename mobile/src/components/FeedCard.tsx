@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { formatFeedStamp } from "../services/dates";
 import { colors, space } from "../theme";
 import type { JournalCard } from "../types";
+import { MoreIcon } from "./MoreIcon";
 
 export function FeedCard({
   card,
@@ -31,8 +32,8 @@ export function FeedCard({
         {selecting ? (
           <Text style={styles.check}>{selected ? "●" : "○"}</Text>
         ) : (
-          <Pressable onPress={onOverflow} hitSlop={10}>
-            <Text style={styles.more}>···</Text>
+          <Pressable onPress={onOverflow} hitSlop={10} accessibilityRole="button" accessibilityLabel="更多">
+            <MoreIcon />
           </Pressable>
         )}
       </View>
@@ -54,6 +55,5 @@ const styles = StyleSheet.create({
   preview: { fontSize: 13, color: colors.muted, lineHeight: 20 },
   meta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   stamp: { fontSize: 12, color: colors.dim },
-  more: { color: colors.muted, fontSize: 16, letterSpacing: 1 },
   check: { color: colors.ink, fontSize: 16 }
 });

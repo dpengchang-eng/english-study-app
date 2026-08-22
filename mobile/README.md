@@ -1,36 +1,12 @@
 # 地道 (mobile)
 
-iOS / Android app that turns Chinese or English into natural American English.
+Life journal, not a course, not a translator, not a vocab list.
 
-This is a **different product** from the Vite flashcard/quiz web app in the repo root.
+Record life (Chinese / English / mixed) → idiomatic English rewrite → practice those sentences (listen / 填 / 选).
 
-## v1 scope
+This Expo app is a **different product** from the Vite flashcard/quiz web app in the repo root. Do not mix the two.
 
-Convert only. Navigation is a stack: **Home → Result**. No bottom tabs. No login screen. Silent anonymous Auth on launch.
-
-This project is on the **Firebase Spark (no-cost) plan**. Cloud Functions cannot be deployed. Convert runs **on the phone**. Do not deploy `functions/`.
-
-v1.1 (not in this PR): tabs, listen, word tap, wordbook, cloze, review, bind Google/Apple.
-
-## Screens
-
-1. **Home** — text box, hold-to-record (release only fills the box), Convert, offline disables convert, last 20 local conversions. Home does not show remaining quota.
-2. **Result** — original text + `sentences[].text` only. Waits 30 seconds. After 30s with no response: `gemini_timeout`. Unknown codes use `parse_error`. `input_too_long` only if text > 2000 (UI still caps at 500). Success actions: copy all, convert again. No Play button. No tappable words. The UI never shows raw Gemini errors.
-
-Locked Result errors:
-
-| errorCode | Copy | Action |
-| --- | --- | --- |
-| `quota_exceeded` | 今天的转换次数用完了 (+ 绑定后每天 80 次 if anonymous) | 回首页 |
-| `input_empty` | 先输入一句话 | 回首页 |
-| `input_too_long` | 这段太长了，缩短一点 | 回首页 |
-| `input_invalid` | 这段没法转，换个说法 | 回首页 |
-| `gemini_timeout` | 网有点慢，再试一次 | Retry |
-| `gemini_unavailable` | 这会儿转不了，稍后再试 | Retry |
-| `safety` | 这段内容转不了，换一句 | 回首页 (do not retry the same text) |
-| `parse_error` | 这次没转成，再试一次 | Retry |
-
-Components: `ComposeCard`, `MicButton`, `OfflineBanner`, `HistoryRow`, `SentenceList`, `ErrorState`, `EmptyHint`.
+The app name stays **地道**. It follows OIO Android 1.0.8 information architecture (home feed + drawer + FAB, no bottom tabs) and Chinese-first copy (`生活集`, `回顾今天`, `卡片`, `记录天数`).
 
 ## Run
 
@@ -40,65 +16,38 @@ npm install
 npx expo start
 ```
 
-Scan the QR code with Expo Go.
-
-### Gemini (Firebase AI Logic)
-
-Convert calls Gemini from the Expo app through **Firebase AI Logic**. It does **not** call a Cloud Function. It does **not** need `EXPO_PUBLIC_GEMINI_API_KEY`.
-
-The app uses the existing Firebase web config / `apiKey` on project `english-study-app-c645a`:
-
-```ts
-getAI(app, { backend: googleAIBackend() })
-```
-
-That is the Gemini Developer API backend, not Vertex.
-
-If convert fails locally, tap **没有 Gemini 时，加载示例**.
-
-### App Check debug token (Expo / local)
-
-AI Logic auto-enforces App Check. Local Expo / Expo Go uses the **debug provider**, not Play Integrity or App Attest. Do not block v1 on a production attestation setup.
-
-1. Open Firebase Console → App Check → the **web** app for `english-study-app-c645a` → Manage debug tokens.
-2. Add a debug token (or copy the one Metro prints: `App Check debug token: …`).
-3. Copy `mobile/.env.example` to `mobile/.env` and set:
-
-```
-EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN=your-debug-token
-```
-
-4. Restart with `npx expo start -c`.
-
-In `__DEV__`, the SDK also generates a token and logs it if the env var is empty. Register that token or requests are rejected. Never commit `.env` or the real token.
-
-Daily quota: **20/day** on the device, Asia/Seoul day. Not enforced by Firestore rules. The counter is stored locally and on `users/{uid}.quota`. Home does not show remaining quota.
-
-On failure the client writes `users/{uid}/conversions` with `status=failed` and `errorCode`. Field names stay the same. `sourceText` ≤ 2000, `sentences` ≤ 15. Tokens include `id` and `lemma` when present. Writes only when `request.auth.uid == uid`.
-
-### Publish Firestore rules
+Scan the QR code with Expo Go. No secrets are required. The loop uses a stable local mock rewrite. Gemini stays optional behind `EXPO_PUBLIC_USE_GEMINI=1` (Firebase AI Logic already in this folder).
 
 ```bash
-npx -y firebase-tools@latest deploy --only firestore:rules --project english-study-app-c645a
+npm run typecheck
+npm run check:loop
 ```
 
-These are prototype Security Rules. Please review them before a wide release.
-
-STT stays on the device. Audio is never uploaded.
-
-## Data the UI shows
-
-```
-Conversion { id, createdAt, sourceText, sentences: { id, text }[] }
-```
-
-The phone may store tokens on the conversion document. v1 UI only renders `sentences[].text`.
-
-Recent list is the last 20 conversions on this device. Successful converts are also written to `users/{uid}/conversions/{id}`.
-
-## Typecheck
+`check:loop` compiles the pure logic modules and asserts the practice rules and the
+Chinese copy. To also drive the built UI, start the web build and run the smoke test,
+which walks 挖空 → 填 → 选 and writes screenshots to `/tmp/didao-shots`:
 
 ```bash
-cd mobile
-npx tsc --noEmit
+npx expo start --web --port 8081
+npm run smoke:web
 ```
+
+## Screens
+
+- **Home feed** — hamburger, `生活集 ▾` (选择卡片 / 排序方式), robot, search. Chips: 回顾今天 / 回顾昨天 / 记忆盲盒. Cards with title, English preview, date · time, ··· (移动到 / 删除). FAB +.
+- **Drawer** — demo user `OIO-377YEQ` + PRO + gear. 卡片 / 记录天数 + Jun–Aug heatmap. AI 助手 Beta. 回忆. 收藏夹 (empty). 生活集 + → 新建生活集.
+- **新增卡片** — 生活集, 标题（可选）, 记录此刻想说的事……, camera/gallery/mic, 0/5000, 完成. Three radios; middle 目标语言 is default. Official radio copy was truncated on device.
+- **Card detail** — 目标语言改写, collapsible 回复, 相关记录, left audio handle, practice toolbar. Tap or long-press a word: 查词 | 挖空. Long-press a blank: 查词 | 删除填空.
+- **填** — dark pill, inline input + ✓, underlined text, wrong answer turns pink.
+- **选** — needs ≥2 distinct blanks. One blank toasts `至少需要两个不同的填空，已切换到键盘填空` and falls back to 填. Two+ blanks: dark 选 pill, two gray answer chips above the toolbar, active blank outline, correct chip fills green.
+- **回忆** — 继续上次, 今天/昨天 (没有 Card when empty), 选择日期 → 记录日历, 关键词搜索, 记忆盲盒.
+- **AI 助手 Beta** — 仅改写 / 改写+翻译 / 改写+回复.
+- **我的** — 语言设置 (screenshot values only), 关于, 退出. Local demo user. Mock Pro. No login/signup or IAP.
+
+## Expo Go
+
+Uses `expo-speech` and `expo-image-picker` only. `expo-speech-recognition` was already in this folder; this work does not add another native STT module. Mic falls back to typing if recognition is unavailable.
+
+`react-native-web` is a dev-only extra so `npx expo start --web` works for the smoke test. It does not affect Expo Go.
+
+Words and blanks are `Pressable`, not `Text` with `onLongPress`: `react-native-web` has no `onLongPress` on `Text`, so 挖空 would be unreachable on web.

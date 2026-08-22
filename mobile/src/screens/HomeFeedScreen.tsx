@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AppDrawer } from "../components/AppDrawer";
 import { BotIcon } from "../components/BotIcon";
 import { FeedCard } from "../components/FeedCard";
+import { SearchIcon } from "../components/SearchIcon";
 import { MysteryBoxModal } from "../components/MysteryBoxModal";
 import { useAppState } from "../context/AppState";
 import type { RootStackParamList } from "../navigation/types";
@@ -64,8 +65,13 @@ export function HomeFeedScreen() {
           >
             <BotIcon />
           </Pressable>
-          <Pressable onPress={() => navigation.navigate("Search", { collectionId })} hitSlop={8}>
-            <Text style={styles.icon}>🔍</Text>
+          <Pressable
+            onPress={() => navigation.navigate("Search", { collectionId })}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="搜索"
+          >
+            <SearchIcon />
           </Pressable>
         </View>
       </View>

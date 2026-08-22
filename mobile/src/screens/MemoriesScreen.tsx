@@ -3,8 +3,10 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BoxIcon } from "../components/BoxIcon";
 import { CalendarIcon } from "../components/CalendarIcon";
 import { MysteryBoxModal } from "../components/MysteryBoxModal";
+import { SearchIcon } from "../components/SearchIcon";
 import { useAppState } from "../context/AppState";
 import type { RootStackParamList } from "../navigation/types";
 import { colors, space } from "../theme";
@@ -57,12 +59,12 @@ export function MemoriesScreen() {
         <Text style={styles.chev}>›</Text>
       </Pressable>
       <Pressable style={styles.row} onPress={() => setKeywordOpen(true)}>
-        <Text style={styles.rowIcon}>🔍</Text>
+        <SearchIcon />
         <Text style={styles.rowText}>关键词搜索</Text>
         <Text style={styles.chev}>›</Text>
       </Pressable>
       <Pressable style={styles.row} onPress={() => setMystery(true)}>
-        <Text style={styles.rowIcon}>📦</Text>
+        <BoxIcon />
         <Text style={styles.rowText}>记忆盲盒</Text>
         <Text style={styles.chev}>›</Text>
       </Pressable>
@@ -156,7 +158,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10
   },
-  rowIcon: { width: 22, textAlign: "center", fontSize: 14 },
   rowText: { flex: 1, fontSize: 15, color: colors.ink },
   chev: { color: colors.muted, fontSize: 18 },
   mask: { flex: 1, backgroundColor: colors.overlay, justifyContent: "center", padding: 24 },

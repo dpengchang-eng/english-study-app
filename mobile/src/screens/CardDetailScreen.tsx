@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CopyIcon } from "../components/CopyIcon";
+import { EditIcon } from "../components/EditIcon";
 import { LookupSheet } from "../components/LookupSheet";
 import { PracticeToolbar } from "../components/PracticeToolbar";
 import { RewriteBlock, type MenuTarget } from "../components/RewriteBlock";
@@ -53,8 +54,13 @@ export function CardDetailScreen() {
         >
           <Text style={styles.nav}>‹</Text>
         </Pressable>
-        <Pressable onPress={() => navigation.navigate("CreateCard", { cardId: card.id })} hitSlop={8}>
-          <Text style={styles.nav}>✎</Text>
+        <Pressable
+          onPress={() => navigation.navigate("CreateCard", { cardId: card.id })}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="编辑"
+        >
+          <EditIcon />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
@@ -177,7 +183,14 @@ export function CardDetailScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.page },
-  head: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: space.md, paddingVertical: 8, backgroundColor: colors.bg },
+  head: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: space.md,
+    paddingVertical: 8,
+    backgroundColor: colors.bg
+  },
   nav: { fontSize: 22, color: colors.ink },
   page: { padding: 12, paddingBottom: 24 },
   card: { backgroundColor: colors.card, borderRadius: 16, padding: space.md, gap: 10 },
